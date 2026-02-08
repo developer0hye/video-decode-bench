@@ -120,15 +120,19 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
         auto end_time = std::chrono::steady_clock::now();
         double elapsed = std::chrono::duration<double>(end_time - start_time).count();
 
-        // Collect frame counts while threads still exist
+        // Collect frame counts and per-thread FPS while threads still exist
         int64_t total_frames = 0;
         bool any_errors = false;
+        std::vector<double> per_stream_fps;
+        per_stream_fps.reserve(count);
 
         for (const auto& thread : threads) {
             if (thread->hasError()) {
                 any_errors = true;
             }
-            total_frames += thread->getFramesDecoded();
+            auto thread_result = thread->getResult();
+            total_frames += thread_result.frames_decoded;
+            per_stream_fps.push_back(thread_result.fps);
         }
 
         // Now threads can be destroyed (will join)
@@ -143,15 +147,23 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
         StreamTestResult test_result;
         test_result.stream_count = count;
         test_result.cpu_usage = cpu_usage;
+        test_result.per_stream_fps = std::move(per_stream_fps);
+
+        // Calculate min/max FPS from per-stream data
+        test_result.min_fps = *std::min_element(test_result.per_stream_fps.begin(),
+                                                 test_result.per_stream_fps.end());
+        test_result.max_fps = *std::max_element(test_result.per_stream_fps.begin(),
+                                                 test_result.per_stream_fps.end());
 
         if (elapsed > 0 && count > 0) {
             double total_fps = static_cast<double>(total_frames) / elapsed;
-            test_result.fps_per_stream = total_fps / count;
+            test_result.fps_per_stream = total_fps / count;  // Average FPS (for display)
         } else {
             test_result.fps_per_stream = 0.0;
         }
 
-        test_result.fps_passed = test_result.fps_per_stream >= result.target_fps;
+        // Key change: Check that minimum FPS meets target (per spec requirement)
+        test_result.fps_passed = test_result.min_fps >= result.target_fps;
         test_result.cpu_passed = test_result.cpu_usage <= config_.cpu_threshold;
         test_result.passed = test_result.fps_passed && test_result.cpu_passed;
 

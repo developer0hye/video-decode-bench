@@ -10,8 +10,11 @@ namespace video_bench {
 struct StreamTestResult {
     int stream_count;
     double fps_per_stream;      // Average FPS across all streams
+    double min_fps;             // Minimum FPS among all streams
+    double max_fps;             // Maximum FPS among all streams
+    std::vector<double> per_stream_fps;  // FPS for each individual stream
     double cpu_usage;           // Average CPU usage percentage
-    bool fps_passed;            // Met FPS requirement
+    bool fps_passed;            // Met FPS requirement (based on min_fps)
     bool cpu_passed;            // Met CPU threshold
     bool passed;                // Both requirements met
 

@@ -19,11 +19,14 @@ void OutputFormatter::printTestingStart() {
 }
 
 void OutputFormatter::printTestResult(const StreamTestResult& result) {
-    // Format: " N stream(s): XXXfps (CPU: YY%) [status]"
+    // Format: " N stream(s): XXXfps (min:XX/avg:XX/max:XX) (CPU: YY%) [status]"
     std::string stream_word = result.stream_count == 1 ? "stream: " : "streams:";
 
     std::cout << std::setw(2) << result.stream_count << " " << stream_word
               << std::setw(5) << static_cast<int>(result.fps_per_stream) << "fps"
+              << " (min:" << static_cast<int>(result.min_fps)
+              << "/avg:" << static_cast<int>(result.fps_per_stream)
+              << "/max:" << static_cast<int>(result.max_fps) << ")"
               << " (CPU: " << std::setw(2) << static_cast<int>(result.cpu_usage) << "%)"
               << " " << result.getStatusSymbol();
 
