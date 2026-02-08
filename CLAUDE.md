@@ -20,9 +20,12 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - Use appropriate log levels (e.g., ERROR for failures, WARN for potential issues, INFO for key execution milestones, DEBUG for development-only details)
 - Never log sensitive data or large data dumps; keep messages concise and actionable
 
-## Build Commands
-- Development: `docker run -it -v $(pwd):/app video-bench-dev bash`
-- Build: `mkdir build && cd build && cmake .. && make`
+## Build & Test Commands
+- Docker image build: `docker build -t video-bench-dev -f docker/Dockerfile .`
+- Development container: `docker run -it -v $(pwd):/app video-bench-dev bash`
+- Build inside container: `mkdir build && cd build && cmake .. && make`
+- When building or testing, always use the Docker environment defined in `docker/Dockerfile`
+- Do not attempt to build or test on the host machine directly; rely on the Docker container for consistent dependencies
 
  ## Review workflow
 - When user asks for "review", always save the report to:
