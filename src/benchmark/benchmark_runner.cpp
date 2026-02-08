@@ -127,11 +127,16 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
         std::vector<double> per_stream_fps;
         per_stream_fps.reserve(count);
 
+        std::string first_error_message;
         for (const auto& thread : threads) {
+            auto thread_result = thread->getResult();
             if (thread->hasError()) {
                 any_errors = true;
+                if (first_error_message.empty()) {
+                    first_error_message = "Thread " + std::to_string(thread_result.thread_id)
+                                        + ": " + thread_result.error_message;
+                }
             }
-            auto thread_result = thread->getResult();
             total_frames += thread_result.frames_decoded;
             per_stream_fps.push_back(thread_result.fps);
         }
@@ -140,8 +145,10 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
         threads.clear();
 
         if (any_errors) {
-            // Skip this count due to errors
-            continue;
+            // Decode error occurred - report and stop benchmark
+            result.error_message = first_error_message;
+            result.success = false;
+            return result;
         }
 
         // Calculate results
