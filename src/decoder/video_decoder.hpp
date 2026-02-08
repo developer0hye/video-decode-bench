@@ -40,6 +40,13 @@ public:
     bool open(const std::string& file_path, std::string& error_message,
               int thread_count = 1, bool is_live_stream = false);
 
+    // Initialize codec context from external codec parameters (no file open)
+    // Used in pipeline mode where PacketReader owns the format context
+    bool initFromParams(const AVCodecParameters* codec_params,
+                        std::string& error_message,
+                        int thread_count = 1,
+                        bool is_live_stream = false);
+
     // Check if decoder is open
     bool isOpen() const;
 

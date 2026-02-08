@@ -6,13 +6,11 @@ namespace video_bench {
 PacketReader::PacketReader(const std::string& path,
                            PacketQueue& queue,
                            std::atomic<bool>& stop_flag,
-                           bool is_live_stream,
-                           int video_stream_index)
+                           bool is_live_stream)
     : path_(path)
     , queue_(queue)
     , stop_flag_(stop_flag)
     , is_live_stream_(is_live_stream)
-    , video_stream_index_(video_stream_index)
     , packet_(av_packet_alloc()) {
 }
 
@@ -34,6 +32,21 @@ bool PacketReader::init(std::string& error_message) {
     ret = avformat_find_stream_info(format_ctx_.get(), nullptr);
     if (ret < 0) {
         error_message = "Reader: failed to find stream info: " + ffmpegErrorString(ret);
+        return false;
+    }
+
+    // Find video stream
+    video_stream_index_ = -1;
+    for (unsigned int i = 0; i < format_ctx_->nb_streams; i++) {
+        if (format_ctx_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            video_stream_index_ = static_cast<int>(i);
+            codec_params_ = format_ctx_->streams[i]->codecpar;
+            break;
+        }
+    }
+
+    if (video_stream_index_ < 0) {
+        error_message = "Reader: no video stream found";
         return false;
     }
 
@@ -96,6 +109,14 @@ bool PacketReader::hasError() const {
 
 std::string PacketReader::getError() const {
     return error_message_;
+}
+
+int PacketReader::getVideoStreamIndex() const {
+    return video_stream_index_;
+}
+
+const AVCodecParameters* PacketReader::getCodecParameters() const {
+    return codec_params_;
 }
 
 } // namespace video_bench

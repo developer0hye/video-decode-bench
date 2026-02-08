@@ -59,27 +59,24 @@ void DecoderThread::run() {
     using Nanoseconds = std::chrono::nanoseconds;
     using namespace std::chrono_literals;
 
-    // Create decoder - each thread has its own instance
-    VideoDecoder decoder;
+    // Create packet queue for pipeline
+    PacketQueue queue(32);
 
-    // Open video file for decoder (to get codec context)
+    // Create and initialize reader first (opens single connection)
+    PacketReader reader(video_path_, queue, stop_flag_, is_live_stream_);
+
     std::string error;
-    if (!decoder.open(video_path_, error, decoder_thread_count_, is_live_stream_)) {
+    if (!reader.init(error)) {
         error_message_ = error;
         has_error_.store(true, std::memory_order_release);
         start_barrier_.arrive_and_wait();
         return;
     }
 
-    // Create packet queue for pipeline
-    PacketQueue queue(32);
-
-    // Create packet reader
-    PacketReader reader(video_path_, queue, stop_flag_, is_live_stream_,
-                        decoder.getVideoStreamIndex());
-
-    // Initialize reader (opens file/stream)
-    if (!reader.init(error)) {
+    // Create decoder from reader's codec parameters (no separate connection)
+    VideoDecoder decoder;
+    if (!decoder.initFromParams(reader.getCodecParameters(), error,
+                                decoder_thread_count_, is_live_stream_)) {
         error_message_ = error;
         has_error_.store(true, std::memory_order_release);
         start_barrier_.arrive_and_wait();

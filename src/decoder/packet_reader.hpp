@@ -15,10 +15,9 @@ public:
     PacketReader(const std::string& path,
                  PacketQueue& queue,
                  std::atomic<bool>& stop_flag,
-                 bool is_live_stream,
-                 int video_stream_index);
+                 bool is_live_stream);
 
-    // Initialize the reader (open file/stream)
+    // Initialize the reader (open file/stream, find video stream)
     bool init(std::string& error_message);
 
     // Reader thread entry point
@@ -30,15 +29,22 @@ public:
     // Get error message if hasError() is true
     std::string getError() const;
 
+    // Get the discovered video stream index (valid after init())
+    int getVideoStreamIndex() const;
+
+    // Get codec parameters for the video stream (valid after init())
+    const AVCodecParameters* getCodecParameters() const;
+
 private:
     std::string path_;
     PacketQueue& queue_;
     std::atomic<bool>& stop_flag_;
     bool is_live_stream_;
-    int video_stream_index_;
+    int video_stream_index_ = -1;
 
     UniqueAVFormatContext format_ctx_;
     UniqueAVPacket packet_;
+    const AVCodecParameters* codec_params_ = nullptr;
 
     std::atomic<bool> has_error_{false};
     std::string error_message_;

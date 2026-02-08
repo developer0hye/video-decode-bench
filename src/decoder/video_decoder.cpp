@@ -93,6 +93,59 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
     return true;
 }
 
+bool VideoDecoder::initFromParams(const AVCodecParameters* codec_params,
+                                   std::string& error_message,
+                                   int thread_count, bool is_live_stream) {
+    is_live_stream_ = is_live_stream;
+
+    if (!codec_params) {
+        error_message = "Null codec parameters";
+        return false;
+    }
+
+    // Find decoder
+    const AVCodec* codec = avcodec_find_decoder(codec_params->codec_id);
+    if (!codec) {
+        error_message = "Unsupported codec";
+        return false;
+    }
+
+    // Allocate codec context
+    AVCodecContext* codec_ctx_raw = avcodec_alloc_context3(codec);
+    if (!codec_ctx_raw) {
+        error_message = "Failed to allocate codec context";
+        return false;
+    }
+    codec_ctx_.reset(codec_ctx_raw);
+
+    // Copy codec parameters
+    int ret = avcodec_parameters_to_context(codec_ctx_.get(), codec_params);
+    if (ret < 0) {
+        error_message = "Failed to copy codec params: " + ffmpegErrorString(ret);
+        return false;
+    }
+
+    // Configure decoder threading
+    codec_ctx_->thread_count = thread_count;
+    codec_ctx_->thread_type = (thread_count == 1) ? 0 : FF_THREAD_FRAME;
+
+    // Open codec
+    ret = avcodec_open2(codec_ctx_.get(), codec, nullptr);
+    if (ret < 0) {
+        error_message = "Failed to open codec: " + ffmpegErrorString(ret);
+        return false;
+    }
+
+    // Verify frame allocation
+    if (!frame_) {
+        error_message = "Failed to allocate frame";
+        return false;
+    }
+
+    is_open_ = true;
+    return true;
+}
+
 bool VideoDecoder::isOpen() const {
     return is_open_;
 }
