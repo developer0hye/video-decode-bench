@@ -38,6 +38,8 @@ set(SOURCES
     src/video/video_info.cpp
     src/decoder/video_decoder.cpp
     src/decoder/decoder_thread.cpp
+    src/decoder/packet_queue.cpp
+    src/decoder/packet_reader.cpp
     src/benchmark/benchmark_runner.cpp
     src/monitor/system_info.cpp
     src/utils/cli_parser.cpp

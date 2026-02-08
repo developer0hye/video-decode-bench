@@ -344,4 +344,76 @@ bool VideoDecoder::seekToStart() {
     return true;
 }
 
+SingleFrameResult VideoDecoder::decodeFromPacket(AVPacket* packet) {
+    SingleFrameResult result{false, false, ""};
+
+    if (!is_open_) {
+        result.error_message = "Decoder not open";
+        return result;
+    }
+
+    // Send packet to decoder
+    int ret = avcodec_send_packet(codec_ctx_.get(), packet);
+    if (ret < 0 && ret != AVERROR(EAGAIN)) {
+        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+        av_strerror(ret, err_buf, sizeof(err_buf));
+        result.error_message = "Send packet error: " + std::string(err_buf);
+        return result;
+    }
+
+    // Try to receive a frame
+    ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+    if (ret == 0) {
+        av_frame_unref(frame_.get());
+        result.success = true;
+        return result;
+    } else if (ret == AVERROR(EAGAIN)) {
+        // Need more packets - not an error, just no frame yet
+        result.success = false;
+        return result;
+    } else if (ret == AVERROR_EOF) {
+        result.reached_eof = true;
+        return result;
+    } else {
+        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+        av_strerror(ret, err_buf, sizeof(err_buf));
+        result.error_message = "Receive frame error: " + std::string(err_buf);
+        return result;
+    }
+}
+
+SingleFrameResult VideoDecoder::flushDecoder() {
+    SingleFrameResult result{false, false, ""};
+
+    if (!is_open_) {
+        result.error_message = "Decoder not open";
+        return result;
+    }
+
+    // Send null packet to signal EOF
+    int ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
+    if (ret < 0 && ret != AVERROR_EOF) {
+        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+        av_strerror(ret, err_buf, sizeof(err_buf));
+        result.error_message = "Flush send error: " + std::string(err_buf);
+        return result;
+    }
+
+    // Try to receive a buffered frame
+    ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+    if (ret == 0) {
+        av_frame_unref(frame_.get());
+        result.success = true;
+        return result;
+    } else if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN)) {
+        result.reached_eof = true;
+        return result;
+    } else {
+        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+        av_strerror(ret, err_buf, sizeof(err_buf));
+        result.error_message = "Flush receive error: " + std::string(err_buf);
+        return result;
+    }
+}
+
 } // namespace video_bench

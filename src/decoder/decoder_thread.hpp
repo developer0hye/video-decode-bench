@@ -7,6 +7,7 @@
 #include <memory>
 #include <barrier>
 #include <functional>
+#include <optional>
 
 namespace video_bench {
 

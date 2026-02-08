@@ -92,6 +92,14 @@ public:
     // Returns immediately after decoding one frame
     SingleFrameResult decodeOneFrame();
 
+    // Decode one frame from an external packet (for pipeline mode)
+    // Caller retains ownership of packet
+    SingleFrameResult decodeFromPacket(AVPacket* packet);
+
+    // Flush decoder to get remaining buffered frames (call at EOF)
+    // Returns true if a frame was decoded
+    SingleFrameResult flushDecoder();
+
     // Seek to the beginning of the video
     bool seekToStart();
 
