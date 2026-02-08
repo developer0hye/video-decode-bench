@@ -148,16 +148,28 @@ GitHub Releases:
 
 ## Additional Considerations
 
-### Supported Codecs
-- H.264 (AVC) - Most common
-- H.265 (HEVC)
-- VP9
-- AV1
+### Test Codecs
+The benchmark tests decoding performance across the following 4 codecs:
+| Codec | Description |
+|-------|-------------|
+| H.264 (AVC) | The most widely used codec globally; baseline for comparison |
+| H.265 (HEVC) | ~50% better compression than H.264; standard for 4K/HDR content |
+| VP9 | Google's royalty-free codec; widely used on YouTube |
+| AV1 | Next-gen royalty-free codec; rapidly growing in streaming (Netflix, YouTube) |
 
-### Recommended Test Video Specifications
-- Resolution: 1080p or 4K
-- Codec: H.264
+### Test Resolutions
+The benchmark tests across 3 resolution tiers to cover low-to-high decoding workloads:
+| Label | Resolution | Description |
+|-------|------------|-------------|
+| HD | 1280x720 (720p) | Low-complexity baseline; common in surveillance and older content |
+| FHD | 1920x1080 (1080p) | Most common streaming/conferencing resolution |
+| 4K | 3840x2160 (2160p) | High-complexity workload; premium streaming content |
+
+### Test Video Specifications
+- Each test video should be prepared for every combination of codec x resolution (4 codecs x 3 resolutions = 12 test files)
 - Duration: 30 seconds ~ 1 minute (for repeated decoding)
+- Frame rate: 30fps (consistent across all test files)
+- Encoding settings: Use standard/default encoding profiles for each codec to reflect real-world usage
 
 ### Future Extension Possibilities
 - GUI version
