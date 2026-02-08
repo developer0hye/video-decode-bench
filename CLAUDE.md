@@ -14,6 +14,12 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - Never skip or combine steps for efficiency
 - If a step seems complex, break it down further into smaller sub-steps
 
+## Logging Rules
+- Logging must be minimal: only include logs that help diagnose program issues or clarify expected output for the user
+- Avoid verbose or redundant log messages; each log line should serve a clear diagnostic or informational purpose
+- Use appropriate log levels (e.g., ERROR for failures, WARN for potential issues, INFO for key execution milestones, DEBUG for development-only details)
+- Never log sensitive data or large data dumps; keep messages concise and actionable
+
 ## Build Commands
 - Development: `docker run -it -v $(pwd):/app video-bench-dev bash`
 - Build: `mkdir build && cd build && cmake .. && make`
