@@ -57,10 +57,19 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     auto cpu_monitor = CpuMonitor::create();
 
     // Calculate decoder thread count based on CPU cores and stream count
-    // This balances parallelism per-decoder vs total thread count
+    // For high stream counts (>=4), use single-threaded decoding to avoid
+    // thread oversubscription (N OS threads + N*M FFmpeg threads competing)
     unsigned int cpu_cores = std::thread::hardware_concurrency();
     if (cpu_cores == 0) cpu_cores = 4;  // fallback
-    int decoder_threads = std::max(1, static_cast<int>(cpu_cores) / stream_count);
+
+    int decoder_threads;
+    if (stream_count >= 4) {
+        // High stream count: single-threaded FFmpeg to prevent oversubscription
+        decoder_threads = 1;
+    } else {
+        // Low stream count: allow FFmpeg multi-threading
+        decoder_threads = std::max(1, static_cast<int>(cpu_cores) / stream_count);
+    }
 
     // Create decoder threads
     std::vector<std::unique_ptr<DecoderThread>> threads;
@@ -88,13 +97,19 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     // Signal threads to stop
     stop_flag.store(true, std::memory_order_release);
 
-    // Get CPU usage before threads are destroyed
+    // Get CPU usage before threads finish
     double cpu_usage = cpu_monitor->getCpuUsage();
 
     auto end_time = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();
 
-    // Collect frame counts while threads still exist
+    // Wait for all threads to fully stop before collecting results
+    // This ensures final frame counts are accurate
+    for (const auto& thread : threads) {
+        thread->join();
+    }
+
+    // Collect frame counts after threads have joined
     int64_t total_frames = 0;
     std::vector<int64_t> per_stream_frames;
     per_stream_frames.reserve(stream_count);
@@ -112,7 +127,7 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
         per_stream_frames.push_back(thread_result.frames_decoded);
     }
 
-    // Now threads can be destroyed (will join)
+    // Clear threads (already joined)
     threads.clear();
 
     // Calculate per-stream FPS from frame counts and elapsed time

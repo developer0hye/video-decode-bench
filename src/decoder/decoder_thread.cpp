@@ -45,6 +45,12 @@ bool DecoderThread::hasError() const {
     return has_error_.load(std::memory_order_relaxed);
 }
 
+void DecoderThread::join() {
+    if (thread_.joinable()) {
+        thread_.join();
+    }
+}
+
 void DecoderThread::run() {
     using Clock = std::chrono::steady_clock;
     using Nanoseconds = std::chrono::nanoseconds;
@@ -75,8 +81,19 @@ void DecoderThread::run() {
     auto next_frame_time = start_time;
     int64_t total_frames = 0;
 
+    // Batch size for atomic updates and stop flag checks
+    // Reduces cache line invalidation and polling overhead
+    constexpr int kBatchSize = 16;
+
     // Decode at real-time pace until stop flag is set
-    while (!stop_flag_.load(std::memory_order_relaxed)) {
+    while (true) {
+        // Check stop flag every kBatchSize frames to reduce cache contention
+        if ((total_frames % kBatchSize) == 0) {
+            if (stop_flag_.load(std::memory_order_relaxed)) {
+                break;
+            }
+        }
+
         // Decode exactly one frame
         SingleFrameResult result = decoder.decodeOneFrame();
 
@@ -87,7 +104,11 @@ void DecoderThread::run() {
         }
 
         total_frames++;
-        frames_decoded_.store(total_frames, std::memory_order_relaxed);
+
+        // Publish frame count every kBatchSize frames to reduce atomic overhead
+        if ((total_frames % kBatchSize) == 0) {
+            frames_decoded_.store(total_frames, std::memory_order_relaxed);
+        }
 
         // Calculate when next frame should be decoded
         next_frame_time += frame_interval;
@@ -109,6 +130,9 @@ void DecoderThread::run() {
             std::this_thread::sleep_until(next_frame_time);
         }
     }
+
+    // Final update to ensure accurate frame count after loop exits
+    frames_decoded_.store(total_frames, std::memory_order_relaxed);
 
     auto end_time = Clock::now();
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();

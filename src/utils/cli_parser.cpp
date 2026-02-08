@@ -81,6 +81,16 @@ CliParseResult CliParser::parse(int argc, char* argv[]) {
             continue;
         }
 
+        if (arg == "--log-file" || arg == "-l") {
+            if (i + 1 >= args.size()) {
+                result.success = false;
+                result.error_message = "Missing value for --log-file";
+                return result;
+            }
+            result.config.log_file = args[++i];
+            continue;
+        }
+
         if (arg[0] == '-') {
             result.success = false;
             result.error_message = "Unknown option: " + arg;
@@ -127,6 +137,7 @@ void CliParser::printUsage(const std::string& program_name) {
               << "Options:\n"
               << "  -m, --max-streams N    Maximum number of streams to test (default: CPU thread count)\n"
               << "  -f, --target-fps FPS   Target FPS for real-time threshold (default: video's native FPS)\n"
+              << "  -l, --log-file PATH    Log file path (default: video-benchmark.log)\n"
               << "  -h, --help             Show this help message\n"
               << "  -v, --version          Show version information\n"
               << "\n"

@@ -9,6 +9,10 @@
 using namespace video_bench;
 
 int main(int argc, char* argv[]) {
+    // Parse command line arguments first to get log file path
+    auto parse_result = CliParser::parse(argc, argv);
+
+    // Initialize logger with configured or default path
     struct LoggerShutdownGuard {
         ~LoggerShutdownGuard() {
             Logger::shutdown();
@@ -16,7 +20,8 @@ int main(int argc, char* argv[]) {
     } logger_shutdown_guard;
     (void)logger_shutdown_guard;
 
-    const std::string log_file_path = Logger::defaultLogFilePath();
+    const std::string log_file_path = parse_result.config.log_file.value_or(
+        Logger::defaultLogFilePath());
     std::string logger_error;
     if (!Logger::initialize(log_file_path, logger_error)) {
         std::cerr << "Warning: Failed to initialize log file '" << log_file_path
@@ -24,9 +29,6 @@ int main(int argc, char* argv[]) {
     } else {
         Logger::info("Log file: " + log_file_path);
     }
-
-    // Parse command line arguments
-    auto parse_result = CliParser::parse(argc, argv);
 
     if (!parse_result.success) {
         OutputFormatter::printError(parse_result.error_message);

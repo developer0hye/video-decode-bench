@@ -16,6 +16,9 @@ struct BenchmarkConfig {
     // Optional: target FPS (default: video's native FPS)
     std::optional<double> target_fps;
 
+    // Optional: log file path (default: video-benchmark.log)
+    std::optional<std::string> log_file;
+
     // Measurement duration per test in seconds
     double measurement_duration = 10.0;
 

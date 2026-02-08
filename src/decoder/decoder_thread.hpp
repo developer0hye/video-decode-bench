@@ -49,6 +49,9 @@ public:
     // Check if thread had initialization error
     bool hasError() const;
 
+    // Wait for thread to complete (must be called after stop_flag is set)
+    void join();
+
 private:
     void run();
 

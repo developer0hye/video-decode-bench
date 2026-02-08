@@ -27,7 +27,67 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - When building or testing, always use the Docker environment defined in `docker/Dockerfile`
 - Do not attempt to build or test on the host machine directly; rely on the Docker container for consistent dependencies
 
- ## Review workflow
+## A/B Testing Guidelines
+
+When comparing performance before/after code changes, use consistent log file naming:
+
+### Log File Naming Convention
+```
+logs/<YYYYMMDD>-<test-name>-<variant>.log
+```
+
+Examples:
+- `logs/20260208-thread-optimization-before.log`
+- `logs/20260208-thread-optimization-after.log`
+- `logs/20260208-atomic-batch-baseline.log`
+- `logs/20260208-atomic-batch-optimized.log`
+
+### A/B Test Workflow
+
+1. **Create logs directory** (if not exists):
+   ```bash
+   mkdir -p logs
+   ```
+
+2. **Test BEFORE changes** (baseline):
+   ```bash
+   git stash  # or checkout original commit
+   # Rebuild
+   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+     "cd /app/build && cmake .. && make -j4"
+   # Run benchmark with descriptive log name
+   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+     "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
+       --max-streams 32 --log-file /app/logs/20260208-optimization-before.log"
+   ```
+
+3. **Test AFTER changes** (optimized):
+   ```bash
+   git stash pop  # or apply changes
+   # Rebuild
+   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+     "cd /app/build && cmake .. && make -j4"
+   # Run benchmark
+   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+     "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
+       --max-streams 32 --log-file /app/logs/20260208-optimization-after.log"
+   ```
+
+4. **Compare results**: Check max streams, CPU usage, and FPS stability
+
+### Recommended Test Matrix
+For comprehensive A/B testing, run these combinations:
+- **Resolutions**: HD (720p), FHD (1080p), 4K
+- **Codecs**: H.264, H.265
+- **Stream counts**: --max-streams 16, 32, 64
+
+### Log File CLI Option
+```bash
+./video-benchmark --log-file <path> <video_source>
+./video-benchmark -l <path> <video_source>
+```
+
+## Review workflow
 - When user asks for "review", always save the report to:
 `reviews/YYYYMMDDHHMMSS-review.md`
 - Create `reviews/` if it does not exist.
