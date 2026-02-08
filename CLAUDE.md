@@ -17,3 +17,9 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 ## Build Commands
 - Development: `docker run -it -v $(pwd):/app video-bench-dev bash`
 - Build: `mkdir build && cd build && cmake .. && make`
+
+ ## Review workflow
+- When user asks for "review", always save the report to:
+`reviews/YYYYMMDDHHMMSS-review.md`
+- Create `reviews/` if it does not exist.
+- Do not modify source code unless explicitly requested.
