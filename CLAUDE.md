@@ -33,14 +33,14 @@ When comparing performance before/after code changes, use consistent log file na
 
 ### Log File Naming Convention
 ```
-logs/<YYYYMMDD>-<test-name>-<variant>.log
+logs/<YYYYMMDDHHMMSS>-<test-name>-<variant>.log
 ```
 
 Examples:
-- `logs/20260208-thread-optimization-before.log`
-- `logs/20260208-thread-optimization-after.log`
-- `logs/20260208-atomic-batch-baseline.log`
-- `logs/20260208-atomic-batch-optimized.log`
+- `logs/20260208143000-thread-optimization-before.log`
+- `logs/20260208143000-thread-optimization-after.log`
+- `logs/20260208150500-atomic-batch-baseline.log`
+- `logs/20260208150500-atomic-batch-optimized.log`
 
 ### A/B Test Workflow
 
@@ -58,7 +58,7 @@ Examples:
    # Run benchmark with descriptive log name
    docker run --rm -v $(pwd):/app video-bench-dev bash -c \
      "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
-       --max-streams 32 --log-file /app/logs/20260208-optimization-before.log"
+       --max-streams 32 --log-file /app/logs/20260208143000-optimization-before.log"
    ```
 
 3. **Test AFTER changes** (optimized):
@@ -70,7 +70,7 @@ Examples:
    # Run benchmark
    docker run --rm -v $(pwd):/app video-bench-dev bash -c \
      "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
-       --max-streams 32 --log-file /app/logs/20260208-optimization-after.log"
+       --max-streams 32 --log-file /app/logs/20260208143000-optimization-after.log"
    ```
 
 4. **Compare results**: Check max streams, CPU usage, and FPS stability
@@ -86,6 +86,11 @@ For comprehensive A/B testing, run these combinations:
 ./video-benchmark --log-file <path> <video_source>
 ./video-benchmark -l <path> <video_source>
 ```
+
+## Pre-Commit Rules
+- Before committing, if any `.cpp`, `.hpp`, `.h`, or `.c` files have been modified, you MUST perform an A/B test comparing before and after the changes
+- Do not commit code changes without verifying that the A/B test results show no regression (or show expected improvement)
+- Follow the A/B Testing Guidelines above for the test procedure
 
 ## Review workflow
 - When user asks for "review", always save the report to:
