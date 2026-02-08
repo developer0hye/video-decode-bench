@@ -168,7 +168,8 @@ docker run --rm -d --name rtsp-server --network host bluenviron/mediamtx:latest
 ```bash
 docker run --rm -d --name rtsp-streamer --network host \
   -v "$(pwd)/test_videos":/videos video-bench-dev bash -c \
-  "ffmpeg -re -stream_loop -1 -i /videos/test_video_fhd_h264.mp4 \
+  "ffmpeg -re -f concat -safe 0 \
+   -i <(for i in \$(seq 1 100); do echo \"file '/videos/test_video_fhd_h264.mp4'\"; done) \
    -c:v libx264 -preset ultrafast -tune zerolatency -g 30 -an \
    -f rtsp rtsp://127.0.0.1:8554/test"
 ```
