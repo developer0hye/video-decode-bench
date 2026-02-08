@@ -55,3 +55,4 @@ build/
 .DS_Store
 video-benchmark.log
 reviews/
+logs/
