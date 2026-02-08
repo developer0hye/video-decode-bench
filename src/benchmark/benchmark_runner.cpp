@@ -101,10 +101,11 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
                 i, config_.video_path, start_barrier, stop_flag));
         }
 
-        // Start CPU monitoring and signal threads to begin
-        cpu_monitor->startMeasurement();
+        // Wait for all threads to complete setup and be ready
         start_barrier.arrive_and_wait();
 
+        // Start CPU monitoring after threads begin decoding
+        cpu_monitor->startMeasurement();
         auto start_time = std::chrono::steady_clock::now();
 
         // Wait for measurement duration
