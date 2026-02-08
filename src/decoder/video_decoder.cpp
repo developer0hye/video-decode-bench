@@ -12,12 +12,7 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
                         int thread_count, bool is_live_stream) {
     is_live_stream_ = is_live_stream;
 
-    // Set RTSP-specific options for live streams
-    AVDictionary* options = nullptr;
-    if (is_live_stream) {
-        av_dict_set(&options, "rtsp_transport", "tcp", 0);  // TCP for reliability
-        av_dict_set(&options, "stimeout", "5000000", 0);    // 5 second timeout
-    }
+    AVDictionary* options = is_live_stream ? createRtspOptions() : nullptr;
 
     // Open input
     AVFormatContext* format_ctx_raw = nullptr;
@@ -25,9 +20,7 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
     av_dict_free(&options);
 
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to open source: " + std::string(err_buf);
+        error_message = "Failed to open source: " + ffmpegErrorString(ret);
         return false;
     }
     format_ctx_.reset(format_ctx_raw);
@@ -35,9 +28,7 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
     // Find stream info
     ret = avformat_find_stream_info(format_ctx_.get(), nullptr);
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to find stream info: " + std::string(err_buf);
+        error_message = "Failed to find stream info: " + ffmpegErrorString(ret);
         return false;
     }
 
@@ -76,9 +67,7 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
     // Copy codec parameters
     ret = avcodec_parameters_to_context(codec_ctx_.get(), codec_params);
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to copy codec params: " + std::string(err_buf);
+        error_message = "Failed to copy codec params: " + ffmpegErrorString(ret);
         return false;
     }
 
@@ -90,9 +79,7 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
     // Open codec
     ret = avcodec_open2(codec_ctx_.get(), codec, nullptr);
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to open codec: " + std::string(err_buf);
+        error_message = "Failed to open codec: " + ffmpegErrorString(ret);
         return false;
     }
 
@@ -118,9 +105,7 @@ int64_t VideoDecoder::decodePacket(std::string* error_out) {
         // EAGAIN means decoder has buffered frames to output first - not an error
         if (ret != AVERROR(EAGAIN)) {
             if (error_out) {
-                char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ret, err_buf, sizeof(err_buf));
-                *error_out = "send_packet error: " + std::string(err_buf);
+                *error_out = "send_packet error: " + ffmpegErrorString(ret);
             }
             return frames;
         }
@@ -129,14 +114,10 @@ int64_t VideoDecoder::decodePacket(std::string* error_out) {
     while (true) {
         ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            // Need more input or end of stream - normal conditions
             break;
         } else if (ret < 0) {
-            // Actual decode error
             if (error_out) {
-                char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ret, err_buf, sizeof(err_buf));
-                *error_out = "receive_frame error: " + std::string(err_buf);
+                *error_out = "receive_frame error: " + ffmpegErrorString(ret);
             }
             break;
         }
@@ -167,9 +148,7 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
                 // Drain decoder - send null packet to flush
                 int drain_ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
                 if (drain_ret < 0 && drain_ret != AVERROR_EOF) {
-                    char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                    av_strerror(drain_ret, err_buf, sizeof(err_buf));
-                    result.error_message = "Drain send_packet error: " + std::string(err_buf);
+                    result.error_message = "Drain send_packet error: " + ffmpegErrorString(drain_ret);
                     return result;
                 }
 
@@ -179,9 +158,7 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
                     if (recv_ret == AVERROR_EOF || recv_ret == AVERROR(EAGAIN)) {
                         break;
                     } else if (recv_ret < 0) {
-                        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                        av_strerror(recv_ret, err_buf, sizeof(err_buf));
-                        result.error_message = "Drain receive_frame error: " + std::string(err_buf);
+                        result.error_message = "Drain receive_frame error: " + ffmpegErrorString(recv_ret);
                         return result;
                     }
                     result.frames_decoded++;
@@ -197,9 +174,7 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
                 }
                 continue;
             } else {
-                char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ret, err_buf, sizeof(err_buf));
-                result.error_message = "Read error: " + std::string(err_buf);
+                result.error_message = "Read error: " + ffmpegErrorString(ret);
                 return result;
             }
         }
@@ -218,6 +193,40 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
         av_packet_unref(packet_.get());
     }
 
+    return result;
+}
+
+SingleFrameResult VideoDecoder::handleEof() {
+    SingleFrameResult result{false, false, ""};
+
+    // Drain decoder
+    int drain_ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
+    if (drain_ret < 0 && drain_ret != AVERROR_EOF) {
+        result.error_message = "Drain error: " + ffmpegErrorString(drain_ret);
+        return result;
+    }
+
+    // Try to get remaining frames
+    int ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+    if (ret == 0) {
+        av_frame_unref(frame_.get());
+        result.success = true;
+        result.reached_eof = true;
+        return result;
+    }
+
+    // Live streams cannot seek - report EOF
+    if (is_live_stream_) {
+        result.error_message = "Stream ended";
+        return result;
+    }
+
+    // File: seek to start and continue
+    if (!seekToStart()) {
+        result.error_message = "Failed to seek to start";
+        return result;
+    }
+    result.reached_eof = true;
     return result;
 }
 
@@ -245,41 +254,15 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
 
             if (ret < 0) {
                 if (ret == AVERROR_EOF) {
-                    // Drain decoder
-                    int drain_ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
-                    if (drain_ret < 0 && drain_ret != AVERROR_EOF) {
-                        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                        av_strerror(drain_ret, err_buf, sizeof(err_buf));
-                        result.error_message = "Drain error: " + std::string(err_buf);
-                        return result;
+                    auto eof_result = handleEof();
+                    if (!eof_result.error_message.empty() || eof_result.success) {
+                        return eof_result;
                     }
-
-                    // Try to get remaining frames
-                    ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
-                    if (ret == 0) {
-                        av_frame_unref(frame_.get());
-                        result.success = true;
-                        result.reached_eof = true;
-                        return result;
-                    }
-
-                    // Live streams cannot seek - report EOF
-                    if (is_live_stream_) {
-                        result.error_message = "Stream ended";
-                        return result;
-                    }
-
-                    // File: seek to start and continue
-                    if (!seekToStart()) {
-                        result.error_message = "Failed to seek to start";
-                        return result;
-                    }
+                    // handleEof seeked to start, continue decoding
                     result.reached_eof = true;
                     continue;
                 } else {
-                    char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                    av_strerror(ret, err_buf, sizeof(err_buf));
-                    result.error_message = "Read error: " + std::string(err_buf);
+                    result.error_message = "Read error: " + ffmpegErrorString(ret);
                     return result;
                 }
             }
@@ -295,9 +278,7 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
             av_packet_unref(packet_.get());
 
             if (ret < 0 && ret != AVERROR(EAGAIN)) {
-                char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ret, err_buf, sizeof(err_buf));
-                result.error_message = "Send packet error: " + std::string(err_buf);
+                result.error_message = "Send packet error: " + ffmpegErrorString(ret);
                 return result;
             }
             // Loop back to receive the frame
@@ -307,7 +288,6 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
                 result.error_message = "Stream ended";
                 return result;
             }
-            // File: seek to start
             if (!seekToStart()) {
                 result.error_message = "Failed to seek to start";
                 return result;
@@ -315,9 +295,7 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
             result.reached_eof = true;
             continue;
         } else {
-            char err_buf[AV_ERROR_MAX_STRING_SIZE];
-            av_strerror(ret, err_buf, sizeof(err_buf));
-            result.error_message = "Decode error: " + std::string(err_buf);
+            result.error_message = "Decode error: " + ffmpegErrorString(ret);
             return result;
         }
     }
@@ -355,9 +333,7 @@ SingleFrameResult VideoDecoder::decodeFromPacket(AVPacket* packet) {
     // Send packet to decoder
     int ret = avcodec_send_packet(codec_ctx_.get(), packet);
     if (ret < 0 && ret != AVERROR(EAGAIN)) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        result.error_message = "Send packet error: " + std::string(err_buf);
+        result.error_message = "Send packet error: " + ffmpegErrorString(ret);
         return result;
     }
 
@@ -368,16 +344,13 @@ SingleFrameResult VideoDecoder::decodeFromPacket(AVPacket* packet) {
         result.success = true;
         return result;
     } else if (ret == AVERROR(EAGAIN)) {
-        // Need more packets - not an error, just no frame yet
         result.success = false;
         return result;
     } else if (ret == AVERROR_EOF) {
         result.reached_eof = true;
         return result;
     } else {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        result.error_message = "Receive frame error: " + std::string(err_buf);
+        result.error_message = "Receive frame error: " + ffmpegErrorString(ret);
         return result;
     }
 }
@@ -393,9 +366,7 @@ SingleFrameResult VideoDecoder::flushDecoder() {
     // Send null packet to signal EOF
     int ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
     if (ret < 0 && ret != AVERROR_EOF) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        result.error_message = "Flush send error: " + std::string(err_buf);
+        result.error_message = "Flush send error: " + ffmpegErrorString(ret);
         return result;
     }
 
@@ -409,9 +380,7 @@ SingleFrameResult VideoDecoder::flushDecoder() {
         result.reached_eof = true;
         return result;
     } else {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        result.error_message = "Flush receive error: " + std::string(err_buf);
+        result.error_message = "Flush receive error: " + ffmpegErrorString(ret);
         return result;
     }
 }

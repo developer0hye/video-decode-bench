@@ -12,25 +12,41 @@
 
 namespace video_bench {
 
-BenchmarkRunner::BenchmarkRunner(const BenchmarkConfig& config)
-    : config_(config) {
+namespace {
+// Allow 2% tolerance for timing overhead in real-time paced decoding
+constexpr double kFpsTolerance = 0.98;
+// Use single-threaded FFmpeg decoding when stream count >= this threshold
+constexpr int kMultiThreadStreamThreshold = 4;
+// Powers-of-2 stop at this stream count, then switch to linear steps
+constexpr int kPowerOfTwoMaxStreams = 16;
+// Extra step inserted between 8 and 16
+constexpr int kExtraStepStreams = 12;
+// Linear step size after powers of 2
+constexpr int kLinearStepSize = 4;
+// First linear step value
+constexpr int kLinearStepStart = 20;
+} // namespace
+
+BenchmarkRunner::BenchmarkRunner(const BenchmarkConfig& config, const VideoInfo& video_info)
+    : config_(config), video_info_(video_info) {
 }
 
 std::vector<int> BenchmarkRunner::getStreamCountsToTest(int max_streams) const {
     std::vector<int> counts;
 
-    // Start with powers of 2 up to 16
-    for (int n = 1; n <= 16 && n <= max_streams; n *= 2) {
+    // Start with powers of 2 up to kPowerOfTwoMaxStreams
+    for (int n = 1; n <= kPowerOfTwoMaxStreams && n <= max_streams; n *= 2) {
         counts.push_back(n);
     }
 
-    // Then add 12 if not already included and within range
-    if (max_streams >= 12 && std::find(counts.begin(), counts.end(), 12) == counts.end()) {
-        counts.push_back(12);
+    // Then add kExtraStepStreams if not already included and within range
+    if (max_streams >= kExtraStepStreams &&
+        std::find(counts.begin(), counts.end(), kExtraStepStreams) == counts.end()) {
+        counts.push_back(kExtraStepStreams);
     }
 
-    // Then add increments of 4 starting from 20
-    for (int n = 20; n <= max_streams; n += 4) {
+    // Then add increments of kLinearStepSize starting from kLinearStepStart
+    for (int n = kLinearStepStart; n <= max_streams; n += kLinearStepSize) {
         counts.push_back(n);
     }
 
@@ -63,7 +79,7 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     if (cpu_cores == 0) cpu_cores = 4;  // fallback
 
     int decoder_threads;
-    if (stream_count >= 4) {
+    if (stream_count >= kMultiThreadStreamThreshold) {
         // High stream count: single-threaded FFmpeg to prevent oversubscription
         decoder_threads = 1;
     } else {
@@ -130,6 +146,17 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     // Clear threads (already joined)
     threads.clear();
 
+    calculateTestResult(single_result, per_stream_frames, total_frames,
+                        elapsed, cpu_usage, stream_count, target_fps);
+
+    return single_result;
+}
+
+void BenchmarkRunner::calculateTestResult(SingleTestResult& single_result,
+                                           const std::vector<int64_t>& per_stream_frames,
+                                           int64_t total_frames, double elapsed,
+                                           double cpu_usage, int stream_count,
+                                           double target_fps) {
     // Calculate per-stream FPS from frame counts and elapsed time
     std::vector<double> per_stream_fps;
     per_stream_fps.reserve(stream_count);
@@ -138,7 +165,6 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
         per_stream_fps.push_back(fps);
     }
 
-    // Calculate results
     StreamTestResult& test_result = single_result.result;
     test_result.stream_count = stream_count;
     test_result.cpu_usage = cpu_usage;
@@ -158,13 +184,9 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     }
 
     // Check pass/fail criteria
-    // Allow 2% tolerance for timing overhead in real-time paced decoding
-    const double fps_tolerance = 0.98;
-    test_result.fps_passed = test_result.min_fps >= (target_fps * fps_tolerance);
+    test_result.fps_passed = test_result.min_fps >= (target_fps * kFpsTolerance);
     test_result.cpu_passed = test_result.cpu_usage <= config_.cpu_threshold;
     test_result.passed = test_result.fps_passed && test_result.cpu_passed;
-
-    return single_result;
 }
 
 BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
@@ -175,21 +197,6 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
     // Get system info
     result.cpu_name = SystemInfo::getCpuName();
     result.thread_count = SystemInfo::getThreadCount();
-
-    // Analyze video
-    std::string error;
-    auto video_info_opt = VideoAnalyzer::analyze(config_.video_path, error);
-    if (!video_info_opt) {
-        result.error_message = error;
-        return result;
-    }
-    video_info_ = *video_info_opt;
-
-    // Check codec support
-    if (!video_info_.isCodecSupported()) {
-        result.error_message = "Unsupported codec: " + video_info_.codec_name;
-        return result;
-    }
 
     // Set video info in result
     result.video_resolution = video_info_.getResolutionString();

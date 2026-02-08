@@ -3,14 +3,6 @@
 
 namespace video_bench {
 
-namespace {
-void packet_deleter(AVPacket* pkt) {
-    if (pkt) {
-        av_packet_free(&pkt);
-    }
-}
-} // namespace
-
 PacketReader::PacketReader(const std::string& path,
                            PacketQueue& queue,
                            std::atomic<bool>& stop_flag,
@@ -21,16 +13,11 @@ PacketReader::PacketReader(const std::string& path,
     , stop_flag_(stop_flag)
     , is_live_stream_(is_live_stream)
     , video_stream_index_(video_stream_index)
-    , packet_(av_packet_alloc(), packet_deleter) {
+    , packet_(av_packet_alloc()) {
 }
 
 bool PacketReader::init(std::string& error_message) {
-    // Set RTSP-specific options for live streams
-    AVDictionary* options = nullptr;
-    if (is_live_stream_) {
-        av_dict_set(&options, "rtsp_transport", "tcp", 0);
-        av_dict_set(&options, "stimeout", "5000000", 0);
-    }
+    AVDictionary* options = is_live_stream_ ? createRtspOptions() : nullptr;
 
     // Open input
     AVFormatContext* format_ctx_raw = nullptr;
@@ -38,9 +25,7 @@ bool PacketReader::init(std::string& error_message) {
     av_dict_free(&options);
 
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Reader: failed to open source: " + std::string(err_buf);
+        error_message = "Reader: failed to open source: " + ffmpegErrorString(ret);
         return false;
     }
     format_ctx_.reset(format_ctx_raw);
@@ -48,9 +33,7 @@ bool PacketReader::init(std::string& error_message) {
     // Find stream info
     ret = avformat_find_stream_info(format_ctx_.get(), nullptr);
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Reader: failed to find stream info: " + std::string(err_buf);
+        error_message = "Reader: failed to find stream info: " + ffmpegErrorString(ret);
         return false;
     }
 
@@ -80,9 +63,7 @@ void PacketReader::run() {
                 avformat_seek_file(format_ctx_.get(), -1, INT64_MIN, 0, INT64_MAX, 0);
                 continue;
             } else {
-                char err_buf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ret, err_buf, sizeof(err_buf));
-                error_message_ = "Read error: " + std::string(err_buf);
+                error_message_ = "Read error: " + ffmpegErrorString(ret);
                 has_error_.store(true, std::memory_order_release);
                 break;
             }

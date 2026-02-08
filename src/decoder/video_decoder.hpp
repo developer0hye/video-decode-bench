@@ -1,52 +1,11 @@
 #ifndef VIDEO_DECODER_HPP
 #define VIDEO_DECODER_HPP
 
+#include "utils/ffmpeg_utils.hpp"
 #include <string>
-#include <memory>
 #include <cstdint>
 
-extern "C" {
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
-}
-
 namespace video_bench {
-
-// Custom deleter for AVFormatContext
-struct AVFormatContextDeleter {
-    void operator()(AVFormatContext* ctx) const {
-        if (ctx) {
-            avformat_close_input(&ctx);
-        }
-    }
-};
-
-// Custom deleter for AVCodecContext
-struct AVCodecContextDeleter {
-    void operator()(AVCodecContext* ctx) const {
-        if (ctx) {
-            avcodec_free_context(&ctx);
-        }
-    }
-};
-
-// Custom deleter for AVFrame
-struct AVFrameDeleter {
-    void operator()(AVFrame* frame) const {
-        if (frame) {
-            av_frame_free(&frame);
-        }
-    }
-};
-
-// Custom deleter for AVPacket
-struct AVPacketDeleter {
-    void operator()(AVPacket* pkt) const {
-        if (pkt) {
-            av_packet_free(&pkt);
-        }
-    }
-};
 
 // Result of a decode operation
 struct DecodeResult {
@@ -111,10 +70,13 @@ private:
     // Returns frames decoded. Sets error_out on decode failure.
     int64_t decodePacket(std::string* error_out);
 
-    std::unique_ptr<AVFormatContext, AVFormatContextDeleter> format_ctx_;
-    std::unique_ptr<AVCodecContext, AVCodecContextDeleter> codec_ctx_;
-    std::unique_ptr<AVFrame, AVFrameDeleter> frame_;
-    std::unique_ptr<AVPacket, AVPacketDeleter> packet_;
+    // Handle EOF: drain decoder, seek or report based on stream type
+    SingleFrameResult handleEof();
+
+    UniqueAVFormatContext format_ctx_;
+    UniqueAVCodecContext codec_ctx_;
+    UniqueAVFrame frame_;
+    UniqueAVPacket packet_;
 
     int video_stream_index_ = -1;
     bool is_open_ = false;

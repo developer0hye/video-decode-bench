@@ -1,4 +1,5 @@
 #include "video/video_info.hpp"
+#include "utils/ffmpeg_utils.hpp"
 #include <cmath>
 
 namespace video_bench {
@@ -55,41 +56,27 @@ std::string VideoAnalyzer::codecIdToName(AVCodecID codec_id) {
 
 std::optional<VideoInfo> VideoAnalyzer::analyze(const std::string& file_path,
                                                  std::string& error_message) {
-    AVFormatContext* format_ctx = nullptr;
-
     // Check if this is an RTSP stream
     bool is_rtsp = (file_path.find("rtsp://") == 0 || file_path.find("rtsps://") == 0);
 
-    // Set RTSP-specific options
-    AVDictionary* options = nullptr;
-    if (is_rtsp) {
-        av_dict_set(&options, "rtsp_transport", "tcp", 0);  // Use TCP for reliability
-        av_dict_set(&options, "stimeout", "5000000", 0);    // 5 second timeout (microseconds)
-    }
+    AVDictionary* options = is_rtsp ? createRtspOptions() : nullptr;
 
     // Open input
-    int ret = avformat_open_input(&format_ctx, file_path.c_str(), nullptr, &options);
+    AVFormatContext* format_ctx_raw = nullptr;
+    int ret = avformat_open_input(&format_ctx_raw, file_path.c_str(), nullptr, &options);
     av_dict_free(&options);
 
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to open source: " + std::string(err_buf);
+        error_message = "Failed to open source: " + ffmpegErrorString(ret);
         return std::nullopt;
     }
 
-    // RAII cleanup for format context
-    auto format_guard = std::unique_ptr<AVFormatContext, void(*)(AVFormatContext*)>(
-        format_ctx,
-        [](AVFormatContext* ctx) { avformat_close_input(&ctx); }
-    );
+    UniqueAVFormatContext format_ctx(format_ctx_raw);
 
     // Find stream info
-    ret = avformat_find_stream_info(format_ctx, nullptr);
+    ret = avformat_find_stream_info(format_ctx.get(), nullptr);
     if (ret < 0) {
-        char err_buf[AV_ERROR_MAX_STRING_SIZE];
-        av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to find stream info: " + std::string(err_buf);
+        error_message = "Failed to find stream info: " + ffmpegErrorString(ret);
         return std::nullopt;
     }
 

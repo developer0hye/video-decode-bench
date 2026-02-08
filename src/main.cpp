@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
     OutputFormatter::printTestingStart();
 
     // Run benchmark
-    BenchmarkRunner runner(parse_result.config);
+    BenchmarkRunner runner(parse_result.config, *video_info);
 
     auto result = runner.run([](const StreamTestResult& test_result) {
         OutputFormatter::printTestResult(test_result);

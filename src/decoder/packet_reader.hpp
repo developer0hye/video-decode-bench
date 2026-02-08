@@ -1,25 +1,12 @@
 #ifndef PACKET_READER_HPP
 #define PACKET_READER_HPP
 
+#include "utils/ffmpeg_utils.hpp"
 #include "decoder/packet_queue.hpp"
 #include <string>
 #include <atomic>
-#include <memory>
-
-extern "C" {
-#include <libavformat/avformat.h>
-}
 
 namespace video_bench {
-
-// Custom deleter for AVFormatContext
-struct ReaderFormatContextDeleter {
-    void operator()(AVFormatContext* ctx) const {
-        if (ctx) {
-            avformat_close_input(&ctx);
-        }
-    }
-};
 
 // I/O-dedicated reader that reads packets from video source
 // Runs in a separate thread to decouple I/O from decoding
@@ -50,8 +37,8 @@ private:
     bool is_live_stream_;
     int video_stream_index_;
 
-    std::unique_ptr<AVFormatContext, ReaderFormatContextDeleter> format_ctx_;
-    std::unique_ptr<AVPacket, void(*)(AVPacket*)> packet_;
+    UniqueAVFormatContext format_ctx_;
+    UniqueAVPacket packet_;
 
     std::atomic<bool> has_error_{false};
     std::string error_message_;
