@@ -14,10 +14,19 @@ A benchmark tool to measure how many videos a PC can decode simultaneously in re
 
 ## Technology Stack
 
-### Language: C++
+### Language: C++20
+- Standard: C++20 or higher (well-supported on all target platforms as of 2026)
 - Rich FFmpeg examples and documentation available
 - Easy to distribute as a single binary with static linking
 - Memory management overhead is minimal for a project of this scale
+- Leverage modern C++ idioms and features:
+  - RAII and smart pointers (std::unique_ptr with custom deleters) for FFmpeg resource management
+  - std::jthread for automatic thread joining and safe lifecycle management
+  - std::barrier / std::latch for thread synchronization
+  - std::atomic for lock-free shared state
+  - std::format for output formatting
+  - Structured bindings, std::optional, std::string_view where appropriate
+  - Concepts for template constraints if applicable
 
 ### Core Library: FFmpeg
 - libavcodec: Decoding
@@ -26,10 +35,28 @@ A benchmark tool to measure how many videos a PC can decode simultaneously in re
 
 ### Build System: CMake
 
+### Development Environment: Docker
+- Use Docker containers for consistent build environments across all platforms
+- Development image should include FFmpeg libraries, CMake, and C++ build tools
+- Mount the project directory into the container for live editing
+- Build and test inside the container to ensure reproducible results
+
+#### Docker Workflow
+1. Build the development image: `docker build -t video-bench-dev .`
+2. Start the container: `docker run -it -v $(pwd):/app video-bench-dev bash`
+3. Build inside the container: `cd /app && mkdir -p build && cd build && cmake .. && make`
+
 ### Target OS Requirements
 - Ubuntu 24.04 or higher
 - Windows 11 or higher
 - macOS (latest stable version)
+
+---
+
+## Terminology
+
+### Real-time Decoding
+Real-time decoding refers to the ability to process frames at the video's defined FPS (frames per second) rate or higher while maintaining sustainable CPU usage. For example, if a video is encoded at 30fps, real-time decoding means the decoder can process at least 30 frames per second without exhausting system resources (average CPU usage ≤ 85%).
 
 ---
 
@@ -44,9 +71,16 @@ A benchmark tool to measure how many videos a PC can decode simultaneously in re
 1. Analyze input video information (codec, resolution, FPS)
 2. Create N decoder threads (starting from N = 1)
 3. Decode the same video in each thread (without rendering)
-4. Verify that all streams maintain real-time (target FPS) or higher
+4. Verify that all streams maintain real-time performance
 5. Repeat while incrementing N
-6. Report the limit when real-time cannot be maintained
+6. Report the limit when real-time performance cannot be maintained
+
+### Real-time Performance Criteria
+A stream count is considered successful if BOTH conditions are met:
+- **FPS Requirement**: Each stream maintains the target FPS or higher
+- **CPU Usage Requirement**: Average CPU usage over a 10-second measurement period stays at or below 85%
+
+This ensures the system can handle the workload sustainably without resource exhaustion, while allowing for momentary CPU usage spikes above 85%.
 
 ### Example Output
 ```
@@ -54,16 +88,16 @@ CPU: AMD Ryzen 7 5800X (16 threads)
 Video: 1080p H.264, 30fps
 
 Testing...
- 1 stream:  847fps ✓
- 2 streams: 423fps ✓
- 4 streams: 211fps ✓
- 8 streams: 105fps ✓
-12 streams:  68fps ✓
-16 streams:  49fps ✓
-20 streams:  38fps ✓
-24 streams:  29fps ✗
+ 1 stream:  847fps (CPU: 12%) ✓
+ 2 streams: 423fps (CPU: 24%) ✓
+ 4 streams: 211fps (CPU: 48%) ✓
+ 8 streams: 105fps (CPU: 71%) ✓
+12 streams:  68fps (CPU: 82%) ✓
+16 streams:  49fps (CPU: 84%) ✓
+20 streams:  38fps (CPU: 87%) ✗ CPU threshold exceeded
+24 streams:  29fps (CPU: 91%) ✗ FPS below target
 
-Result: Maximum 20 concurrent streams can be decoded (real-time)
+Result: Maximum 16 concurrent streams can be decoded in real-time
 ```
 
 ---
@@ -85,6 +119,30 @@ GitHub Releases:
    ./video-benchmark my_video.mp4
    ```
 3. View results
+
+---
+
+## Design Guidelines
+
+### Memory Safety
+- All FFmpeg resources (AVFormatContext, AVCodecContext, AVFrame, AVPacket, etc.) must be properly freed upon thread completion or error
+- Use RAII patterns or custom deleters with smart pointers to guarantee cleanup even on exceptional code paths
+- Each decoder thread must own its resources independently — no shared ownership of FFmpeg objects across threads
+- Validate all allocations and handle allocation failures gracefully
+
+### Thread Safety & Deadlock Prevention
+- Each decoder thread must operate with its own independent FFmpeg context (AVFormatContext, AVCodecContext) — never share these across threads
+- Minimize shared mutable state; use thread-local storage where possible
+- When shared state is unavoidable (e.g., result aggregation), use a single lock with a consistent acquisition order to prevent deadlocks
+- Avoid nested locking — if multiple locks are needed, document and enforce a strict lock ordering
+- Prefer lock-free mechanisms (e.g., atomic variables) for simple counters and flags
+
+### Thread Load Balancing
+- All decoder threads must start decoding simultaneously using a synchronization barrier (e.g., std::barrier or countdown latch)
+- Each thread decodes the same video file independently from the beginning to ensure uniform workload
+- Measure per-thread FPS individually and report both per-thread and aggregate metrics
+- Monitor for thread starvation — if any single thread's FPS deviates significantly from others, it indicates a scheduling or resource contention issue
+- Use OS-level thread affinity hints if needed to ensure fair CPU time distribution across decoder threads
 
 ---
 
