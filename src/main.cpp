@@ -1,0 +1,72 @@
+#include "utils/cli_parser.hpp"
+#include "utils/output_formatter.hpp"
+#include "benchmark/benchmark_runner.hpp"
+#include "video/video_info.hpp"
+#include "monitor/system_info.hpp"
+#include <iostream>
+
+using namespace video_bench;
+
+int main(int argc, char* argv[]) {
+    // Parse command line arguments
+    auto parse_result = CliParser::parse(argc, argv);
+
+    if (!parse_result.success) {
+        OutputFormatter::printError(parse_result.error_message);
+        std::cerr << "Try '" << argv[0] << " --help' for more information.\n";
+        return 1;
+    }
+
+    if (parse_result.show_help) {
+        CliParser::printUsage(argv[0]);
+        return 0;
+    }
+
+    if (parse_result.show_version) {
+        CliParser::printVersion();
+        return 0;
+    }
+
+    // Analyze video first to print header before benchmark starts
+    std::string error;
+    auto video_info = VideoAnalyzer::analyze(parse_result.config.video_path, error);
+    if (!video_info) {
+        OutputFormatter::printError(error);
+        return 1;
+    }
+
+    // Check codec support
+    if (!video_info->isCodecSupported()) {
+        OutputFormatter::printError("Unsupported codec: " + video_info->codec_name);
+        return 1;
+    }
+
+    // Build a partial result for header printing
+    BenchmarkResult header_info;
+    header_info.cpu_name = SystemInfo::getCpuName();
+    header_info.thread_count = SystemInfo::getThreadCount();
+    header_info.video_resolution = video_info->getResolutionString();
+    header_info.codec_name = video_info->codec_name;
+    header_info.video_fps = video_info->fps;
+
+    // Print header
+    OutputFormatter::printHeader(header_info);
+    OutputFormatter::printTestingStart();
+
+    // Run benchmark
+    BenchmarkRunner runner(parse_result.config);
+
+    auto result = runner.run([](const StreamTestResult& test_result) {
+        OutputFormatter::printTestResult(test_result);
+    });
+
+    if (!result.success) {
+        OutputFormatter::printError(result.error_message);
+        return 1;
+    }
+
+    // Print summary
+    OutputFormatter::printSummary(result);
+
+    return 0;
+}

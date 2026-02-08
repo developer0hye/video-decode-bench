@@ -39,3 +39,12 @@
 
 # debug information files
 *.dwo
+
+# Build directory
+build/
+
+# Test videos
+*.mp4
+*.mkv
+*.avi
+*.mov
