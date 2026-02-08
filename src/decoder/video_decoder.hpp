@@ -86,7 +86,8 @@ public:
 
 private:
     // Decode all available frames from current packet
-    int64_t decodePacket();
+    // Returns frames decoded. Sets error_out on decode failure.
+    int64_t decodePacket(std::string* error_out);
 
     std::unique_ptr<AVFormatContext, AVFormatContextDeleter> format_ctx_;
     std::unique_ptr<AVCodecContext, AVCodecContextDeleter> codec_ctx_;

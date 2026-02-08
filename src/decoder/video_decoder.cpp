@@ -98,20 +98,34 @@ bool VideoDecoder::isOpen() const {
     return is_open_;
 }
 
-int64_t VideoDecoder::decodePacket() {
+int64_t VideoDecoder::decodePacket(std::string* error_out) {
     int64_t frames = 0;
 
     int ret = avcodec_send_packet(codec_ctx_.get(), packet_.get());
     if (ret < 0) {
-        // Error or EOF
-        return frames;
+        // EAGAIN means decoder has buffered frames to output first - not an error
+        if (ret != AVERROR(EAGAIN)) {
+            if (error_out) {
+                char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                av_strerror(ret, err_buf, sizeof(err_buf));
+                *error_out = "send_packet error: " + std::string(err_buf);
+            }
+            return frames;
+        }
     }
 
-    while (ret >= 0) {
+    while (true) {
         ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            // Need more input or end of stream - normal conditions
             break;
         } else if (ret < 0) {
+            // Actual decode error
+            if (error_out) {
+                char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                av_strerror(ret, err_buf, sizeof(err_buf));
+                *error_out = "receive_frame error: " + std::string(err_buf);
+            }
             break;
         }
 
@@ -138,9 +152,26 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
 
         if (ret < 0) {
             if (ret == AVERROR_EOF) {
-                // Drain decoder
-                avcodec_send_packet(codec_ctx_.get(), nullptr);
-                while (avcodec_receive_frame(codec_ctx_.get(), frame_.get()) >= 0) {
+                // Drain decoder - send null packet to flush
+                int drain_ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
+                if (drain_ret < 0 && drain_ret != AVERROR_EOF) {
+                    char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                    av_strerror(drain_ret, err_buf, sizeof(err_buf));
+                    result.error_message = "Drain send_packet error: " + std::string(err_buf);
+                    return result;
+                }
+
+                // Receive all remaining frames
+                while (true) {
+                    int recv_ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+                    if (recv_ret == AVERROR_EOF || recv_ret == AVERROR(EAGAIN)) {
+                        break;
+                    } else if (recv_ret < 0) {
+                        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                        av_strerror(recv_ret, err_buf, sizeof(err_buf));
+                        result.error_message = "Drain receive_frame error: " + std::string(err_buf);
+                        return result;
+                    }
                     result.frames_decoded++;
                     av_frame_unref(frame_.get());
                 }
@@ -163,7 +194,13 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
 
         // Only process video stream packets
         if (packet_->stream_index == video_stream_index_) {
-            result.frames_decoded += decodePacket();
+            std::string decode_error;
+            result.frames_decoded += decodePacket(&decode_error);
+            if (!decode_error.empty()) {
+                result.error_message = decode_error;
+                av_packet_unref(packet_.get());
+                return result;
+            }
         }
 
         av_packet_unref(packet_.get());
