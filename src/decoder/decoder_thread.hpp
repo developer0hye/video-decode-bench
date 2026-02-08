@@ -17,6 +17,8 @@ struct DecoderThreadResult {
     double fps;
     bool success;
     std::string error_message;
+    int64_t lag_count;    // Number of frames that were late
+    double max_lag_ms;    // Maximum lag in milliseconds
 };
 
 // A worker thread that continuously decodes video
@@ -24,6 +26,7 @@ class DecoderThread {
 public:
     DecoderThread(int thread_id,
                   const std::string& video_path,
+                  double target_fps,
                   std::barrier<>& start_barrier,
                   std::atomic<bool>& stop_flag);
 
@@ -49,6 +52,7 @@ private:
 
     int thread_id_;
     std::string video_path_;
+    double target_fps_;
     std::barrier<>& start_barrier_;
     std::atomic<bool>& stop_flag_;
 
@@ -56,6 +60,8 @@ private:
     std::atomic<bool> has_error_{false};
     std::string error_message_;
     double final_fps_ = 0.0;
+    int64_t lag_count_ = 0;
+    double max_lag_ms_ = 0.0;
 
     std::jthread thread_;
 };

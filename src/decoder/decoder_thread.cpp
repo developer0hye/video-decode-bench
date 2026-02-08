@@ -6,10 +6,12 @@ namespace video_bench {
 
 DecoderThread::DecoderThread(int thread_id,
                              const std::string& video_path,
+                             double target_fps,
                              std::barrier<>& start_barrier,
                              std::atomic<bool>& stop_flag)
     : thread_id_(thread_id)
     , video_path_(video_path)
+    , target_fps_(target_fps)
     , start_barrier_(start_barrier)
     , stop_flag_(stop_flag)
     , thread_([this] { run(); }) {
@@ -29,7 +31,9 @@ DecoderThreadResult DecoderThread::getResult() const {
         frames_decoded_.load(),
         final_fps_,
         !has_error_.load(),
-        error_message_
+        error_message_,
+        lag_count_,
+        max_lag_ms_
     };
 }
 
@@ -38,6 +42,9 @@ bool DecoderThread::hasError() const {
 }
 
 void DecoderThread::run() {
+    using Clock = std::chrono::steady_clock;
+    using Nanoseconds = std::chrono::nanoseconds;
+
     // Create decoder - each thread has its own instance
     VideoDecoder decoder;
 
@@ -51,28 +58,55 @@ void DecoderThread::run() {
         return;
     }
 
+    // Calculate frame interval based on target FPS (in nanoseconds for precision)
+    const auto frame_interval = std::chrono::duration_cast<Nanoseconds>(
+        std::chrono::duration<double>(1.0 / target_fps_));
+    // Allow 1ms tolerance before counting as lag
+    const auto lag_tolerance = std::chrono::milliseconds(1);
+
     // Wait for all threads to be ready
     start_barrier_.arrive_and_wait();
 
-    auto start_time = std::chrono::steady_clock::now();
+    auto start_time = Clock::now();
+    auto next_frame_time = start_time;
     int64_t total_frames = 0;
 
-    // Decode continuously until stop flag is set
+    // Decode at real-time pace until stop flag is set
     while (!stop_flag_.load(std::memory_order_relaxed)) {
-        // Decode in small chunks to check stop flag frequently
-        DecodeResult result = decoder.decodeFor(0.1);  // 100ms chunks
+        // Decode exactly one frame
+        SingleFrameResult result = decoder.decodeOneFrame();
 
-        if (!result.error_message.empty()) {
+        if (!result.success) {
             error_message_ = result.error_message;
             has_error_.store(true, std::memory_order_release);
             break;
         }
 
-        total_frames += result.frames_decoded;
+        total_frames++;
         frames_decoded_.store(total_frames, std::memory_order_relaxed);
+
+        // Calculate when next frame should be decoded
+        next_frame_time += frame_interval;
+
+        auto now = Clock::now();
+
+        // Check for lag (decode took longer than frame interval)
+        if (now > next_frame_time + lag_tolerance) {
+            lag_count_++;
+            double lag_ms = std::chrono::duration<double, std::milli>(
+                now - next_frame_time).count();
+            if (lag_ms > max_lag_ms_) {
+                max_lag_ms_ = lag_ms;
+            }
+            // Reset timing to prevent accumulating lag
+            next_frame_time = now;
+        } else if (now < next_frame_time) {
+            // Ahead of schedule - sleep until next frame time
+            std::this_thread::sleep_until(next_frame_time);
+        }
     }
 
-    auto end_time = std::chrono::steady_clock::now();
+    auto end_time = Clock::now();
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();
 
     if (elapsed > 0) {

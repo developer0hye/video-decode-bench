@@ -56,7 +56,12 @@ A benchmark tool to measure how many videos a PC can decode simultaneously in re
 ## Terminology
 
 ### Real-time Decoding
-Real-time decoding refers to the ability to process frames at the video's defined FPS (frames per second) rate or higher while maintaining sustainable CPU usage. For example, if a video is encoded at 30fps, real-time decoding means the decoder can process at least 30 frames per second without exhausting system resources (average CPU usage ≤ 85%).
+Real-time decoding simulates actual playback by pacing frame decoding to match the target FPS. Each decoder thread:
+1. Decodes one frame at a time
+2. Waits until the next frame's scheduled time before proceeding
+3. If decoding takes longer than the frame interval, the stream is "lagging"
+
+This accurately simulates real-world scenarios like media servers and multi-viewer applications. A stream is considered successful if it maintains the target FPS without excessive lag while keeping average CPU usage ≤ 85%.
 
 ---
 
@@ -85,19 +90,20 @@ This ensures the system can handle the workload sustainably without resource exh
 ### Example Output
 ```
 CPU: AMD Ryzen 7 5800X (16 threads)
-Video: 1080p H.264, 30fps
+Video: 1080p H.264, 30fps (target: 30fps)
 
-Testing...
- 1 stream:  847fps (CPU: 12%) ✓
- 2 streams: 423fps (CPU: 24%) ✓
- 4 streams: 211fps (CPU: 48%) ✓
- 8 streams: 105fps (CPU: 71%) ✓
-12 streams:  68fps (CPU: 82%) ✓
-16 streams:  49fps (CPU: 84%) ✓
-20 streams:  38fps (CPU: 87%) ✗ CPU threshold exceeded
-24 streams:  29fps (CPU: 91%) ✗ FPS below target
+Testing (real-time paced decoding)...
+ 1 stream:  30.0fps (CPU:  3%) ✓
+ 2 streams: 30.0fps (CPU:  6%) ✓
+ 4 streams: 30.0fps (CPU: 12%) ✓
+ 8 streams: 30.0fps (CPU: 24%) ✓
+16 streams: 30.0fps (CPU: 48%) ✓
+32 streams: 30.0fps (CPU: 78%) ✓
+48 streams: 30.0fps (CPU: 84%) ✓
+56 streams: 30.0fps (CPU: 88%) ✗ CPU threshold exceeded
+64 streams: 28.5fps (CPU: 92%) ✗ FPS below target
 
-Result: Maximum 16 concurrent streams can be decoded in real-time
+Result: Maximum 48 concurrent streams can be decoded in real-time
 ```
 
 ---

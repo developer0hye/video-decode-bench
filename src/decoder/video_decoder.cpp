@@ -209,6 +209,97 @@ DecodeResult VideoDecoder::decodeFor(double duration_seconds) {
     return result;
 }
 
+SingleFrameResult VideoDecoder::decodeOneFrame() {
+    SingleFrameResult result{false, false, ""};
+
+    if (!is_open_) {
+        result.error_message = "Decoder not open";
+        return result;
+    }
+
+    // Loop until we get exactly one frame
+    while (true) {
+        // First, try to receive a frame from decoder (might have buffered frames)
+        int ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+
+        if (ret == 0) {
+            // Got a frame
+            av_frame_unref(frame_.get());
+            result.success = true;
+            return result;
+        } else if (ret == AVERROR(EAGAIN)) {
+            // Need more input data - read next packet
+            ret = av_read_frame(format_ctx_.get(), packet_.get());
+
+            if (ret < 0) {
+                if (ret == AVERROR_EOF) {
+                    // Drain decoder
+                    int drain_ret = avcodec_send_packet(codec_ctx_.get(), nullptr);
+                    if (drain_ret < 0 && drain_ret != AVERROR_EOF) {
+                        char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                        av_strerror(drain_ret, err_buf, sizeof(err_buf));
+                        result.error_message = "Drain error: " + std::string(err_buf);
+                        return result;
+                    }
+
+                    // Try to get remaining frames
+                    ret = avcodec_receive_frame(codec_ctx_.get(), frame_.get());
+                    if (ret == 0) {
+                        av_frame_unref(frame_.get());
+                        result.success = true;
+                        result.reached_eof = true;
+                        return result;
+                    }
+
+                    // No more frames - seek to start and continue
+                    if (!seekToStart()) {
+                        result.error_message = "Failed to seek to start";
+                        return result;
+                    }
+                    result.reached_eof = true;
+                    continue;
+                } else {
+                    char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                    av_strerror(ret, err_buf, sizeof(err_buf));
+                    result.error_message = "Read error: " + std::string(err_buf);
+                    return result;
+                }
+            }
+
+            // Skip non-video packets
+            if (packet_->stream_index != video_stream_index_) {
+                av_packet_unref(packet_.get());
+                continue;
+            }
+
+            // Send packet to decoder
+            ret = avcodec_send_packet(codec_ctx_.get(), packet_.get());
+            av_packet_unref(packet_.get());
+
+            if (ret < 0 && ret != AVERROR(EAGAIN)) {
+                char err_buf[AV_ERROR_MAX_STRING_SIZE];
+                av_strerror(ret, err_buf, sizeof(err_buf));
+                result.error_message = "Send packet error: " + std::string(err_buf);
+                return result;
+            }
+            // Loop back to receive the frame
+        } else if (ret == AVERROR_EOF) {
+            // Decoder fully drained - seek to start
+            if (!seekToStart()) {
+                result.error_message = "Failed to seek to start";
+                return result;
+            }
+            result.reached_eof = true;
+            continue;
+        } else {
+            char err_buf[AV_ERROR_MAX_STRING_SIZE];
+            av_strerror(ret, err_buf, sizeof(err_buf));
+            result.error_message = "Decode error: " + std::string(err_buf);
+            return result;
+        }
+    }
+}
+
 bool VideoDecoder::seekToStart() {
     if (!is_open_) {
         return false;

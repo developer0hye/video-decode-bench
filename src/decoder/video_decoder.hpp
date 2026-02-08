@@ -55,6 +55,13 @@ struct DecodeResult {
     std::string error_message;
 };
 
+// Result of decoding a single frame
+struct SingleFrameResult {
+    bool success;              // Frame decoded successfully
+    bool reached_eof;          // Reached end of file (seek performed)
+    std::string error_message;
+};
+
 // Single-threaded video decoder
 // Each instance owns its own FFmpeg context for thread safety
 class VideoDecoder {
@@ -77,6 +84,10 @@ public:
     // Decode frames for a specified duration (in seconds)
     // Returns number of frames decoded
     DecodeResult decodeFor(double duration_seconds);
+
+    // Decode exactly one video frame
+    // Returns immediately after decoding one frame
+    SingleFrameResult decodeOneFrame();
 
     // Seek to the beginning of the video
     bool seekToStart();

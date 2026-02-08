@@ -62,7 +62,7 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
 
     for (int i = 0; i < stream_count; i++) {
         threads.push_back(std::make_unique<DecoderThread>(
-            i, config_.video_path, start_barrier, stop_flag));
+            i, config_.video_path, target_fps, start_barrier, stop_flag));
     }
 
     // Wait for all threads to complete setup and be ready
@@ -134,7 +134,9 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     }
 
     // Check pass/fail criteria
-    test_result.fps_passed = test_result.min_fps >= target_fps;
+    // Allow 2% tolerance for timing overhead in real-time paced decoding
+    const double fps_tolerance = 0.98;
+    test_result.fps_passed = test_result.min_fps >= (target_fps * fps_tolerance);
     test_result.cpu_passed = test_result.cpu_usage <= config_.cpu_threshold;
     test_result.passed = test_result.fps_passed && test_result.cpu_passed;
 
