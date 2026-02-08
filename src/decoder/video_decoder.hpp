@@ -76,7 +76,8 @@ public:
     VideoDecoder& operator=(VideoDecoder&&) = default;
 
     // Open a video file for decoding
-    bool open(const std::string& file_path, std::string& error_message);
+    // thread_count: number of decoder threads (1 = single-threaded, 0 = auto)
+    bool open(const std::string& file_path, std::string& error_message, int thread_count = 1);
 
     // Check if decoder is open
     bool isOpen() const;

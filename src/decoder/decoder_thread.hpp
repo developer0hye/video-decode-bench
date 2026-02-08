@@ -27,6 +27,7 @@ public:
     DecoderThread(int thread_id,
                   const std::string& video_path,
                   double target_fps,
+                  int decoder_thread_count,
                   std::barrier<>& start_barrier,
                   std::atomic<bool>& stop_flag);
 
@@ -53,6 +54,7 @@ private:
     int thread_id_;
     std::string video_path_;
     double target_fps_;
+    int decoder_thread_count_;
     std::barrier<>& start_barrier_;
     std::atomic<bool>& stop_flag_;
 

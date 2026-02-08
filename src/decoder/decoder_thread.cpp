@@ -7,11 +7,13 @@ namespace video_bench {
 DecoderThread::DecoderThread(int thread_id,
                              const std::string& video_path,
                              double target_fps,
+                             int decoder_thread_count,
                              std::barrier<>& start_barrier,
                              std::atomic<bool>& stop_flag)
     : thread_id_(thread_id)
     , video_path_(video_path)
     , target_fps_(target_fps)
+    , decoder_thread_count_(decoder_thread_count)
     , start_barrier_(start_barrier)
     , stop_flag_(stop_flag)
     , thread_([this] { run(); }) {
@@ -50,7 +52,7 @@ void DecoderThread::run() {
 
     // Open video file
     std::string error;
-    if (!decoder.open(video_path_, error)) {
+    if (!decoder.open(video_path_, error, decoder_thread_count_)) {
         error_message_ = error;
         has_error_.store(true, std::memory_order_release);
         // Still need to arrive at barrier to not deadlock other threads

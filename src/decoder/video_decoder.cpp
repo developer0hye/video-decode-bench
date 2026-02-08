@@ -8,7 +8,7 @@ VideoDecoder::VideoDecoder()
     , packet_(av_packet_alloc(), AVPacketDeleter{}) {
 }
 
-bool VideoDecoder::open(const std::string& file_path, std::string& error_message) {
+bool VideoDecoder::open(const std::string& file_path, std::string& error_message, int thread_count) {
     // Open input file
     AVFormatContext* format_ctx_raw = nullptr;
     int ret = avformat_open_input(&format_ctx_raw, file_path.c_str(), nullptr, nullptr);
@@ -70,10 +70,10 @@ bool VideoDecoder::open(const std::string& file_path, std::string& error_message
         return false;
     }
 
-    // Disable hardware acceleration and multi-threading
-    // This ensures we measure pure CPU software decoding performance
-    codec_ctx_->thread_count = 1;
-    codec_ctx_->thread_type = 0;
+    // Configure decoder threading based on expected concurrent streams
+    // thread_count=1 for many streams, higher for fewer streams
+    codec_ctx_->thread_count = thread_count;
+    codec_ctx_->thread_type = (thread_count == 1) ? 0 : FF_THREAD_FRAME;
 
     // Open codec
     ret = avcodec_open2(codec_ctx_.get(), codec, nullptr);

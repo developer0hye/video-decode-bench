@@ -56,13 +56,19 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     // Create CPU monitor
     auto cpu_monitor = CpuMonitor::create();
 
+    // Calculate decoder thread count based on CPU cores and stream count
+    // This balances parallelism per-decoder vs total thread count
+    unsigned int cpu_cores = std::thread::hardware_concurrency();
+    if (cpu_cores == 0) cpu_cores = 4;  // fallback
+    int decoder_threads = std::max(1, static_cast<int>(cpu_cores) / stream_count);
+
     // Create decoder threads
     std::vector<std::unique_ptr<DecoderThread>> threads;
     threads.reserve(stream_count);
 
     for (int i = 0; i < stream_count; i++) {
         threads.push_back(std::make_unique<DecoderThread>(
-            i, config_.video_path, target_fps, start_barrier, stop_flag));
+            i, config_.video_path, target_fps, decoder_threads, start_barrier, stop_flag));
     }
 
     // Wait for all threads to complete setup and be ready
