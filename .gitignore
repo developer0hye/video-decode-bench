@@ -51,3 +51,5 @@ build/
 
 # Exception: benchmark test videos
 !test_videos/*.mp4
+
+.DS_Store
