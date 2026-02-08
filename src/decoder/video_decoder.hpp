@@ -77,7 +77,9 @@ public:
 
     // Open a video file for decoding
     // thread_count: number of decoder threads (1 = single-threaded, 0 = auto)
-    bool open(const std::string& file_path, std::string& error_message, int thread_count = 1);
+    // is_live_stream: true for RTSP and other non-seekable sources
+    bool open(const std::string& file_path, std::string& error_message,
+              int thread_count = 1, bool is_live_stream = false);
 
     // Check if decoder is open
     bool isOpen() const;
@@ -108,6 +110,7 @@ private:
 
     int video_stream_index_ = -1;
     bool is_open_ = false;
+    bool is_live_stream_ = false;
 };
 
 } // namespace video_bench

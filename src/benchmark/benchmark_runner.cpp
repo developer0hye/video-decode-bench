@@ -66,9 +66,12 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     std::vector<std::unique_ptr<DecoderThread>> threads;
     threads.reserve(stream_count);
 
+    bool is_live = video_info_.is_live_stream;
+
     for (int i = 0; i < stream_count; i++) {
         threads.push_back(std::make_unique<DecoderThread>(
-            i, config_.video_path, target_fps, decoder_threads, start_barrier, stop_flag));
+            i, config_.video_path, target_fps, decoder_threads, is_live,
+            start_barrier, stop_flag));
     }
 
     // Wait for all threads to complete setup and be ready
@@ -177,6 +180,7 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
     result.video_resolution = video_info_.getResolutionString();
     result.codec_name = video_info_.codec_name;
     result.video_fps = video_info_.fps;
+    result.is_live_stream = video_info_.is_live_stream;
 
     // Determine target FPS
     result.target_fps = config_.target_fps.value_or(video_info_.fps);

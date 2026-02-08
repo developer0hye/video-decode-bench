@@ -22,9 +22,13 @@ void OutputFormatter::printHeader(const BenchmarkResult& result) {
     printInfoLine(cpu_line.str());
 
     std::ostringstream video_line;
-    video_line << "Video: " << result.video_resolution
+    video_line << (result.is_live_stream ? "Source: " : "Video: ")
+               << result.video_resolution
                << " " << result.codec_name
                << ", " << static_cast<int>(result.video_fps) << "fps";
+    if (result.is_live_stream) {
+        video_line << " (live)";
+    }
     printInfoLine(video_line.str());
 
     std::cout << "\n";

@@ -40,6 +40,7 @@ struct BenchmarkResult {
     std::string video_resolution;
     std::string codec_name;
     double video_fps;
+    bool is_live_stream;
 
     // Target FPS used for testing
     double target_fps;

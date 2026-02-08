@@ -8,6 +8,7 @@
 - Concurrent stream scaling test to find maximum sustainable stream count
 - FPS and CPU threshold based pass/fail criteria
 - Codec support: H.264, H.265/HEVC, VP9, AV1
+- **RTSP stream support** for IP camera / network stream testing
 - Result logging to `video-benchmark.log` (thread-safe logging via `spdlog`)
 
 ## Repository Structure
@@ -101,8 +102,10 @@ docker run --rm -v "$(pwd)":/app -w /app video-bench-dev bash -lc \
 ## CLI Usage
 
 ```bash
-./build/video-benchmark [OPTIONS] <video_file>
+./build/video-benchmark [OPTIONS] <video_source>
 ```
+
+The `<video_source>` can be a local file path or an RTSP URL.
 
 Options:
 
@@ -110,6 +113,19 @@ Options:
 - `-f, --target-fps FPS`: target FPS threshold (default: source video FPS)
 - `-h, --help`: show help
 - `-v, --version`: show version
+
+Examples:
+
+```bash
+# Local file
+./build/video-benchmark test_videos/test_video_fhd_h264.mp4
+
+# RTSP stream
+./build/video-benchmark rtsp://192.168.1.100:554/stream
+
+# With options
+./build/video-benchmark --max-streams 8 rtsp://camera.local/live
+```
 
 ## Running Your Own Video File
 
@@ -134,6 +150,51 @@ Then run:
 ```bash
 ./build/video-benchmark /videos/your_video.mp4
 ```
+
+## RTSP Stream Testing
+
+You can test with RTSP streams from IP cameras or set up a local RTSP server for testing.
+
+### Testing with Local RTSP Server
+
+1. Start the RTSP server (mediamtx):
+
+```bash
+docker run --rm -d --name rtsp-server --network host bluenviron/mediamtx:latest
+```
+
+2. Stream a local video file to the RTSP server:
+
+```bash
+docker run --rm -d --name rtsp-streamer --network host \
+  -v "$(pwd)/test_videos":/videos video-bench-dev bash -c \
+  "ffmpeg -re -stream_loop -1 -i /videos/test_video_fhd_h264.mp4 \
+   -c:v libx264 -preset ultrafast -tune zerolatency -g 30 -an \
+   -f rtsp rtsp://127.0.0.1:8554/test"
+```
+
+3. Run the benchmark:
+
+```bash
+docker run --rm --network host -v "$(pwd)":/app video-bench-dev \
+  ./build/video-benchmark rtsp://127.0.0.1:8554/test --max-streams 8
+```
+
+4. Clean up:
+
+```bash
+docker stop rtsp-streamer rtsp-server
+```
+
+### Testing with IP Camera
+
+Simply pass the camera's RTSP URL:
+
+```bash
+./build/video-benchmark rtsp://admin:password@192.168.1.100:554/stream1
+```
+
+Note: Each decoder thread opens its own RTSP connection, so the camera must support multiple concurrent connections.
 
 ## Native Build (Optional)
 

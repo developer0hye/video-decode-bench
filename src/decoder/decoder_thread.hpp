@@ -28,6 +28,7 @@ public:
                   const std::string& video_path,
                   double target_fps,
                   int decoder_thread_count,
+                  bool is_live_stream,
                   std::barrier<>& start_barrier,
                   std::atomic<bool>& stop_flag);
 
@@ -55,6 +56,7 @@ private:
     std::string video_path_;
     double target_fps_;
     int decoder_thread_count_;
+    bool is_live_stream_;
     std::barrier<>& start_barrier_;
     std::atomic<bool>& stop_flag_;
 

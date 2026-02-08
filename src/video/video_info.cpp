@@ -57,12 +57,24 @@ std::optional<VideoInfo> VideoAnalyzer::analyze(const std::string& file_path,
                                                  std::string& error_message) {
     AVFormatContext* format_ctx = nullptr;
 
-    // Open input file
-    int ret = avformat_open_input(&format_ctx, file_path.c_str(), nullptr, nullptr);
+    // Check if this is an RTSP stream
+    bool is_rtsp = (file_path.find("rtsp://") == 0 || file_path.find("rtsps://") == 0);
+
+    // Set RTSP-specific options
+    AVDictionary* options = nullptr;
+    if (is_rtsp) {
+        av_dict_set(&options, "rtsp_transport", "tcp", 0);  // Use TCP for reliability
+        av_dict_set(&options, "stimeout", "5000000", 0);    // 5 second timeout (microseconds)
+    }
+
+    // Open input
+    int ret = avformat_open_input(&format_ctx, file_path.c_str(), nullptr, &options);
+    av_dict_free(&options);
+
     if (ret < 0) {
         char err_buf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to open file: " + std::string(err_buf);
+        error_message = "Failed to open source: " + std::string(err_buf);
         return std::nullopt;
     }
 
@@ -138,6 +150,7 @@ std::optional<VideoInfo> VideoAnalyzer::analyze(const std::string& file_path,
     info.duration_seconds = duration;
     info.total_frames = total_frames;
     info.video_stream_index = video_stream_index;
+    info.is_live_stream = is_rtsp;
 
     return info;
 }

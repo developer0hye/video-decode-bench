@@ -99,12 +99,14 @@ CliParseResult CliParser::parse(int argc, char* argv[]) {
 
     if (video_path.empty()) {
         result.success = false;
-        result.error_message = "Missing video file path";
+        result.error_message = "Missing video file path or RTSP URL";
         return result;
     }
 
-    // Check if file exists
-    if (!std::filesystem::exists(video_path)) {
+    // Check if it's an RTSP URL or file
+    bool is_rtsp = (video_path.find("rtsp://") == 0 || video_path.find("rtsps://") == 0);
+
+    if (!is_rtsp && !std::filesystem::exists(video_path)) {
         result.success = false;
         result.error_message = "File not found: " + video_path;
         return result;
@@ -115,12 +117,12 @@ CliParseResult CliParser::parse(int argc, char* argv[]) {
 }
 
 void CliParser::printUsage(const std::string& program_name) {
-    std::cout << "Usage: " << program_name << " [OPTIONS] <video_file>\n"
+    std::cout << "Usage: " << program_name << " [OPTIONS] <video_source>\n"
               << "\n"
               << "Video decoding benchmark tool - measures concurrent decoding capacity\n"
               << "\n"
               << "Arguments:\n"
-              << "  <video_file>           Path to video file to benchmark\n"
+              << "  <video_source>         Path to video file or RTSP URL\n"
               << "\n"
               << "Options:\n"
               << "  -m, --max-streams N    Maximum number of streams to test (default: CPU thread count)\n"
@@ -129,11 +131,13 @@ void CliParser::printUsage(const std::string& program_name) {
               << "  -v, --version          Show version information\n"
               << "\n"
               << "Supported codecs: H.264, H.265/HEVC, VP9, AV1\n"
+              << "Supported inputs: Local files, RTSP streams (rtsp://)\n"
               << "\n"
               << "Examples:\n"
               << "  " << program_name << " video.mp4\n"
               << "  " << program_name << " --max-streams 8 video.mp4\n"
-              << "  " << program_name << " -f 30 -m 16 video.mp4\n";
+              << "  " << program_name << " rtsp://192.168.1.100:554/stream\n"
+              << "  " << program_name << " -f 30 -m 4 rtsp://camera.local/live\n";
 }
 
 void CliParser::printVersion() {

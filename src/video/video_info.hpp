@@ -31,7 +31,8 @@ struct VideoInfo {
     double fps;
     double duration_seconds;
     int64_t total_frames;
-    int video_stream_index;
+    int video_stream_index = -1;
+    bool is_live_stream = false;  // True for RTSP and other live sources
 
     // Format resolution as string (e.g., "1080p", "4K")
     std::string getResolutionString() const;

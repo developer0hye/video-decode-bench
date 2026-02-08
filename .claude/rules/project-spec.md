@@ -7,6 +7,7 @@ A benchmark tool to measure how many videos a PC can decode simultaneously in re
 ### Core Goals
 - Measure CPU software decoding performance (excluding GPU hardware acceleration)
 - Determine multi-stream concurrent decoding limits
+- Support both local files and RTSP network streams (IP cameras, surveillance systems)
 - Cross-platform support (Windows, Linux, macOS)
 - Distribute as a single executable that is easy for general users to use
 
@@ -68,7 +69,7 @@ This accurately simulates real-world scenarios like media servers and multi-view
 ## Functional Requirements
 
 ### Input
-- Video file path (required)
+- Video source (required): local file path or RTSP URL (e.g., `rtsp://192.168.1.100:554/stream`)
 - Maximum number of streams to test (optional, default: CPU thread count)
 - Target FPS (optional, default: video's native FPS)
 
@@ -88,6 +89,8 @@ A stream count is considered successful if BOTH conditions are met:
 This ensures the system can handle the workload sustainably without resource exhaustion, while allowing for momentary CPU usage spikes above 85%.
 
 ### Example Output
+
+#### Local File
 ```
 CPU: AMD Ryzen 7 5800X (16 threads)
 Video: 1080p H.264, 30fps (target: 30fps)
@@ -106,6 +109,21 @@ Testing (real-time paced decoding)...
 Result: Maximum 48 concurrent streams can be decoded in real-time
 ```
 
+#### RTSP Stream
+```
+CPU: AMD Ryzen 7 5800X (16 threads)
+Source: rtsp://192.168.1.100:554/stream (live)
+Video: 1080p H.264, 30fps (target: 30fps)
+
+Testing (real-time paced decoding)...
+ 1 stream:  30.0fps (CPU:  4%) ✓
+ 2 streams: 30.0fps (CPU:  7%) ✓
+ 4 streams: 30.0fps (CPU: 14%) ✓
+ 8 streams: 29.8fps (CPU: 28%) ✓
+
+Result: Maximum 8 concurrent RTSP streams can be decoded in real-time
+```
+
 ---
 
 ## Distribution Strategy
@@ -122,7 +140,11 @@ GitHub Releases:
 1. Download the appropriate file for your OS from GitHub Releases
 2. Run in terminal
    ```bash
+   # Local file
    ./video-benchmark my_video.mp4
+
+   # RTSP stream (IP camera)
+   ./video-benchmark rtsp://192.168.1.100:554/stream
    ```
 3. View results
 
@@ -149,6 +171,36 @@ GitHub Releases:
 - Measure per-thread FPS individually and report both per-thread and aggregate metrics
 - Monitor for thread starvation — if any single thread's FPS deviates significantly from others, it indicates a scheduling or resource contention issue
 - Use OS-level thread affinity hints if needed to ensure fair CPU time distribution across decoder threads
+
+### RTSP Stream Handling
+RTSP streams differ from local files in several key aspects:
+
+| Aspect | Local File | RTSP Stream |
+|--------|-----------|-------------|
+| I/O Source | Disk | Network socket |
+| Latency | Predictable | Variable (jitter) |
+| Seek | Supported | Not supported (live) |
+| Duration | Known | Infinite/unknown |
+| Packet Loss | None | Possible |
+
+### Input Source Parity Policy
+To keep benchmark results comparable across local files and RTSP streams, the benchmark must model both sources under a real-time arrival constraint.
+
+- The benchmark design must always consider both local file and RTSP execution paths.
+- When testing with a local file, packet/frame ingestion must be rate-limited to emulate RTSP-like real-time arrival speed (based on source timestamps / target FPS pacing), not maximum disk read speed.
+- File-mode results must be interpreted as "RTSP-like emulated real-time ingest + decode capacity" unless explicitly marked as offline throughput mode.
+
+#### RTSP-specific Requirements
+- Use TCP transport (`rtsp_transport=tcp`) for reliability over UDP
+- Set connection timeout (default: 5 seconds) to handle unresponsive sources
+- Each decoder thread opens its own RTSP connection independently
+- No seek-to-start behavior — continuous stream reading
+- Handle connection failures gracefully with clear error messages
+
+#### Future RTSP Optimizations (Phase 2+)
+- Jitter buffer: 3-5 packet buffer per stream to absorb network latency variation
+- Event-driven I/O: Single network thread with epoll/kqueue for 50+ streams
+- Connection pooling: Automatic reconnection on stream interruption
 
 ---
 
@@ -182,6 +234,7 @@ The benchmark tests across 3 resolution tiers to cover low-to-high decoding work
 - JSON/CSV output for results
 - GPU decoding benchmark (NVDEC, VAAPI)
 - Real-time CPU/memory usage monitoring
+- Advanced RTSP features: jitter buffer, event-driven I/O, auto-reconnection
 
 ---
 

@@ -67,6 +67,7 @@ int main(int argc, char* argv[]) {
     header_info.video_resolution = video_info->getResolutionString();
     header_info.codec_name = video_info->codec_name;
     header_info.video_fps = video_info->fps;
+    header_info.is_live_stream = video_info->is_live_stream;
 
     // Print header
     OutputFormatter::printHeader(header_info);

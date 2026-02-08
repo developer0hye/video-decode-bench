@@ -8,14 +8,26 @@ VideoDecoder::VideoDecoder()
     , packet_(av_packet_alloc(), AVPacketDeleter{}) {
 }
 
-bool VideoDecoder::open(const std::string& file_path, std::string& error_message, int thread_count) {
-    // Open input file
+bool VideoDecoder::open(const std::string& file_path, std::string& error_message,
+                        int thread_count, bool is_live_stream) {
+    is_live_stream_ = is_live_stream;
+
+    // Set RTSP-specific options for live streams
+    AVDictionary* options = nullptr;
+    if (is_live_stream) {
+        av_dict_set(&options, "rtsp_transport", "tcp", 0);  // TCP for reliability
+        av_dict_set(&options, "stimeout", "5000000", 0);    // 5 second timeout
+    }
+
+    // Open input
     AVFormatContext* format_ctx_raw = nullptr;
-    int ret = avformat_open_input(&format_ctx_raw, file_path.c_str(), nullptr, nullptr);
+    int ret = avformat_open_input(&format_ctx_raw, file_path.c_str(), nullptr, &options);
+    av_dict_free(&options);
+
     if (ret < 0) {
         char err_buf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, err_buf, sizeof(err_buf));
-        error_message = "Failed to open file: " + std::string(err_buf);
+        error_message = "Failed to open source: " + std::string(err_buf);
         return false;
     }
     format_ctx_.reset(format_ctx_raw);
@@ -251,7 +263,13 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
                         return result;
                     }
 
-                    // No more frames - seek to start and continue
+                    // Live streams cannot seek - report EOF
+                    if (is_live_stream_) {
+                        result.error_message = "Stream ended";
+                        return result;
+                    }
+
+                    // File: seek to start and continue
                     if (!seekToStart()) {
                         result.error_message = "Failed to seek to start";
                         return result;
@@ -284,7 +302,12 @@ SingleFrameResult VideoDecoder::decodeOneFrame() {
             }
             // Loop back to receive the frame
         } else if (ret == AVERROR_EOF) {
-            // Decoder fully drained - seek to start
+            // Decoder fully drained
+            if (is_live_stream_) {
+                result.error_message = "Stream ended";
+                return result;
+            }
+            // File: seek to start
             if (!seekToStart()) {
                 result.error_message = "Failed to seek to start";
                 return result;
