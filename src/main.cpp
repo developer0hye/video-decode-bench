@@ -1,5 +1,6 @@
 #include "utils/cli_parser.hpp"
 #include "utils/output_formatter.hpp"
+#include "utils/logger.hpp"
 #include "benchmark/benchmark_runner.hpp"
 #include "video/video_info.hpp"
 #include "monitor/system_info.hpp"
@@ -8,12 +9,30 @@
 using namespace video_bench;
 
 int main(int argc, char* argv[]) {
+    struct LoggerShutdownGuard {
+        ~LoggerShutdownGuard() {
+            Logger::shutdown();
+        }
+    } logger_shutdown_guard;
+    (void)logger_shutdown_guard;
+
+    const std::string log_file_path = Logger::defaultLogFilePath();
+    std::string logger_error;
+    if (!Logger::initialize(log_file_path, logger_error)) {
+        std::cerr << "Warning: Failed to initialize log file '" << log_file_path
+                  << "': " << logger_error << "\n";
+    } else {
+        Logger::info("Log file: " + log_file_path);
+    }
+
     // Parse command line arguments
     auto parse_result = CliParser::parse(argc, argv);
 
     if (!parse_result.success) {
         OutputFormatter::printError(parse_result.error_message);
-        std::cerr << "Try '" << argv[0] << " --help' for more information.\n";
+        std::string help_hint = "Try '" + std::string(argv[0]) + " --help' for more information.";
+        std::cerr << help_hint << "\n";
+        Logger::error(help_hint);
         return 1;
     }
 

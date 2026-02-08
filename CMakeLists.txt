@@ -17,6 +17,20 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # Find required packages
 find_package(FFmpeg REQUIRED)
 find_package(Threads REQUIRED)
+find_package(spdlog QUIET)
+if(NOT spdlog_FOUND)
+    include(FetchContent)
+    set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+    set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
+    set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        spdlog
+        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+        GIT_TAG v1.14.1
+    )
+    FetchContent_MakeAvailable(spdlog)
+endif()
 
 # Source files
 set(SOURCES
@@ -28,6 +42,7 @@ set(SOURCES
     src/monitor/system_info.cpp
     src/utils/cli_parser.cpp
     src/utils/output_formatter.cpp
+    src/utils/logger.cpp
 )
 
 # Platform-specific CPU monitor implementation
@@ -56,6 +71,12 @@ target_link_libraries(video-benchmark PRIVATE
     ${FFMPEG_LIBRARIES}
     Threads::Threads
 )
+
+if(TARGET spdlog::spdlog_header_only)
+    target_link_libraries(video-benchmark PRIVATE spdlog::spdlog_header_only)
+else()
+    target_link_libraries(video-benchmark PRIVATE spdlog::spdlog)
+endif()
 
 # Platform-specific settings
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")

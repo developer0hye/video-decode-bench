@@ -53,3 +53,4 @@ build/
 !test_videos/*.mp4
 
 .DS_Store
+video-benchmark.log
