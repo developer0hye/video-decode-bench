@@ -43,8 +43,11 @@
 # Build directory
 build/
 
-# Test videos
+# Test videos (general)
 *.mp4
 *.mkv
 *.avi
 *.mov
+
+# Exception: benchmark test videos
+!test_videos/*.mp4
