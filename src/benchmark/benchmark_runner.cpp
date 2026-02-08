@@ -34,10 +34,111 @@ std::vector<int> BenchmarkRunner::getStreamCountsToTest(int max_streams) const {
         counts.push_back(n);
     }
 
+    // Always include max_streams to ensure we test the upper bound
+    if (std::find(counts.begin(), counts.end(), max_streams) == counts.end()) {
+        counts.push_back(max_streams);
+    }
+
     // Sort the list
     std::sort(counts.begin(), counts.end());
 
     return counts;
+}
+
+BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_count, double target_fps) {
+    SingleTestResult single_result;
+    single_result.has_error = false;
+
+    // Create synchronization primitives
+    std::barrier start_barrier(stream_count + 1);
+    std::atomic<bool> stop_flag{false};
+
+    // Create CPU monitor
+    auto cpu_monitor = CpuMonitor::create();
+
+    // Create decoder threads
+    std::vector<std::unique_ptr<DecoderThread>> threads;
+    threads.reserve(stream_count);
+
+    for (int i = 0; i < stream_count; i++) {
+        threads.push_back(std::make_unique<DecoderThread>(
+            i, config_.video_path, start_barrier, stop_flag));
+    }
+
+    // Wait for all threads to complete setup and be ready
+    start_barrier.arrive_and_wait();
+
+    // Start CPU monitoring after threads begin decoding
+    cpu_monitor->startMeasurement();
+    auto start_time = std::chrono::steady_clock::now();
+
+    // Wait for measurement duration
+    std::this_thread::sleep_for(
+        std::chrono::duration<double>(config_.measurement_duration));
+
+    // Signal threads to stop
+    stop_flag.store(true, std::memory_order_release);
+
+    // Get CPU usage before threads are destroyed
+    double cpu_usage = cpu_monitor->getCpuUsage();
+
+    auto end_time = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(end_time - start_time).count();
+
+    // Collect frame counts while threads still exist
+    int64_t total_frames = 0;
+    std::vector<int64_t> per_stream_frames;
+    per_stream_frames.reserve(stream_count);
+
+    for (const auto& thread : threads) {
+        auto thread_result = thread->getResult();
+        if (thread->hasError()) {
+            single_result.has_error = true;
+            if (single_result.error_message.empty()) {
+                single_result.error_message = "Thread " + std::to_string(thread_result.thread_id)
+                                            + ": " + thread_result.error_message;
+            }
+        }
+        total_frames += thread_result.frames_decoded;
+        per_stream_frames.push_back(thread_result.frames_decoded);
+    }
+
+    // Now threads can be destroyed (will join)
+    threads.clear();
+
+    // Calculate per-stream FPS from frame counts and elapsed time
+    std::vector<double> per_stream_fps;
+    per_stream_fps.reserve(stream_count);
+    for (int64_t frames : per_stream_frames) {
+        double fps = (elapsed > 0) ? static_cast<double>(frames) / elapsed : 0.0;
+        per_stream_fps.push_back(fps);
+    }
+
+    // Calculate results
+    StreamTestResult& test_result = single_result.result;
+    test_result.stream_count = stream_count;
+    test_result.cpu_usage = cpu_usage;
+    test_result.per_stream_fps = std::move(per_stream_fps);
+
+    // Calculate min/max FPS from per-stream data
+    test_result.min_fps = *std::min_element(test_result.per_stream_fps.begin(),
+                                             test_result.per_stream_fps.end());
+    test_result.max_fps = *std::max_element(test_result.per_stream_fps.begin(),
+                                             test_result.per_stream_fps.end());
+
+    if (elapsed > 0 && stream_count > 0) {
+        double total_fps = static_cast<double>(total_frames) / elapsed;
+        test_result.fps_per_stream = total_fps / stream_count;
+    } else {
+        test_result.fps_per_stream = 0.0;
+    }
+
+    // Check pass/fail criteria
+    test_result.fps_passed = test_result.min_fps >= target_fps;
+    test_result.cpu_passed = test_result.cpu_usage <= config_.cpu_threshold;
+    test_result.passed = test_result.fps_passed && test_result.cpu_passed;
+
+    return single_result;
 }
 
 BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
@@ -79,114 +180,55 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
     // Get stream counts to test
     auto stream_counts = getStreamCountsToTest(max_streams);
 
-    // Create synchronization primitives and shared state that persist across iterations
-    // Note: We need to properly implement the test loop
-
     int last_passing = 0;
 
     for (int count : stream_counts) {
-        // Create synchronization primitives
-        std::barrier start_barrier(count + 1);
-        std::atomic<bool> stop_flag{false};
+        auto single_result = runSingleTest(count, result.target_fps);
 
-        // Create CPU monitor
-        auto cpu_monitor = CpuMonitor::create();
-
-        // Create decoder threads
-        std::vector<std::unique_ptr<DecoderThread>> threads;
-        threads.reserve(count);
-
-        for (int i = 0; i < count; i++) {
-            threads.push_back(std::make_unique<DecoderThread>(
-                i, config_.video_path, start_barrier, stop_flag));
-        }
-
-        // Wait for all threads to complete setup and be ready
-        start_barrier.arrive_and_wait();
-
-        // Start CPU monitoring after threads begin decoding
-        cpu_monitor->startMeasurement();
-        auto start_time = std::chrono::steady_clock::now();
-
-        // Wait for measurement duration
-        std::this_thread::sleep_for(
-            std::chrono::duration<double>(config_.measurement_duration));
-
-        // Signal threads to stop
-        stop_flag.store(true, std::memory_order_release);
-
-        // Get CPU usage before threads are destroyed
-        double cpu_usage = cpu_monitor->getCpuUsage();
-
-        auto end_time = std::chrono::steady_clock::now();
-        double elapsed = std::chrono::duration<double>(end_time - start_time).count();
-
-        // Collect frame counts and per-thread FPS while threads still exist
-        int64_t total_frames = 0;
-        bool any_errors = false;
-        std::vector<double> per_stream_fps;
-        per_stream_fps.reserve(count);
-
-        std::string first_error_message;
-        for (const auto& thread : threads) {
-            auto thread_result = thread->getResult();
-            if (thread->hasError()) {
-                any_errors = true;
-                if (first_error_message.empty()) {
-                    first_error_message = "Thread " + std::to_string(thread_result.thread_id)
-                                        + ": " + thread_result.error_message;
-                }
-            }
-            total_frames += thread_result.frames_decoded;
-            per_stream_fps.push_back(thread_result.fps);
-        }
-
-        // Now threads can be destroyed (will join)
-        threads.clear();
-
-        if (any_errors) {
-            // Decode error occurred - report and stop benchmark
-            result.error_message = first_error_message;
+        if (single_result.has_error) {
+            result.error_message = single_result.error_message;
             result.success = false;
             return result;
         }
 
-        // Calculate results
-        StreamTestResult test_result;
-        test_result.stream_count = count;
-        test_result.cpu_usage = cpu_usage;
-        test_result.per_stream_fps = std::move(per_stream_fps);
+        result.test_results.push_back(single_result.result);
 
-        // Calculate min/max FPS from per-stream data
-        test_result.min_fps = *std::min_element(test_result.per_stream_fps.begin(),
-                                                 test_result.per_stream_fps.end());
-        test_result.max_fps = *std::max_element(test_result.per_stream_fps.begin(),
-                                                 test_result.per_stream_fps.end());
-
-        if (elapsed > 0 && count > 0) {
-            double total_fps = static_cast<double>(total_frames) / elapsed;
-            test_result.fps_per_stream = total_fps / count;  // Average FPS (for display)
-        } else {
-            test_result.fps_per_stream = 0.0;
-        }
-
-        // Key change: Check that minimum FPS meets target (per spec requirement)
-        test_result.fps_passed = test_result.min_fps >= result.target_fps;
-        test_result.cpu_passed = test_result.cpu_usage <= config_.cpu_threshold;
-        test_result.passed = test_result.fps_passed && test_result.cpu_passed;
-
-        result.test_results.push_back(test_result);
-
-        // Report progress
         if (progress_callback) {
-            progress_callback(test_result);
+            progress_callback(single_result.result);
         }
 
-        if (test_result.passed) {
+        if (single_result.result.passed) {
             last_passing = count;
         } else {
-            // First failure - we could do binary search here for exact limit
-            // For now, just stop testing
+            // First failure - binary search between last_passing and count
+            if (last_passing > 0 && count - last_passing > 1) {
+                int low = last_passing + 1;
+                int high = count - 1;
+
+                while (low <= high) {
+                    int mid = low + (high - low) / 2;
+                    auto mid_result = runSingleTest(mid, result.target_fps);
+
+                    if (mid_result.has_error) {
+                        result.error_message = mid_result.error_message;
+                        result.success = false;
+                        return result;
+                    }
+
+                    result.test_results.push_back(mid_result.result);
+
+                    if (progress_callback) {
+                        progress_callback(mid_result.result);
+                    }
+
+                    if (mid_result.result.passed) {
+                        last_passing = mid;
+                        low = mid + 1;
+                    } else {
+                        high = mid - 1;
+                    }
+                }
+            }
             break;
         }
     }

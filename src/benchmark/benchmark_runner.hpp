@@ -23,6 +23,16 @@ private:
     // Get stream counts to test (1, 2, 4, 8, 12, 16, 20, 24, ...)
     std::vector<int> getStreamCountsToTest(int max_streams) const;
 
+    // Result of a single stream count test (internal use)
+    struct SingleTestResult {
+        StreamTestResult result;
+        bool has_error;
+        std::string error_message;
+    };
+
+    // Run a single stream count test
+    SingleTestResult runSingleTest(int stream_count, double target_fps);
+
     BenchmarkConfig config_;
     VideoInfo video_info_;
 };
