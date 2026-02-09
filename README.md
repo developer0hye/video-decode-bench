@@ -155,6 +155,8 @@ Then run:
 
 You can test with RTSP streams from IP cameras or set up a local RTSP server for testing.
 
+**Supported codecs over RTSP: H.264 and H.265 only.** VP9 and AV1 are not supported over RTSP due to FFmpeg 6.1.1 RTP packetizer limitations (VP9 RTP is experimental/broken, AV1 RTP packetizer is not included). Use local file mode for VP9/AV1 benchmarks.
+
 ### Testing with Local RTSP Server
 
 1. Start the RTSP server (mediamtx):
@@ -165,12 +167,23 @@ docker run --rm -d --name rtsp-server --network host bluenviron/mediamtx:latest
 
 2. Stream a local video file to the RTSP server:
 
+**H.264** (re-encoding required for stable timestamps):
 ```bash
 docker run --rm -d --name rtsp-streamer --network host \
   -v "$(pwd)/test_videos":/videos video-bench-dev bash -c \
   "ffmpeg -re -f concat -safe 0 \
    -i <(for i in \$(seq 1 100); do echo \"file '/videos/test_video_fhd_h264.mp4'\"; done) \
    -c:v libx264 -preset ultrafast -tune zerolatency -g 30 -an \
+   -f rtsp rtsp://127.0.0.1:8554/test"
+```
+
+**H.265** (copy mode works well):
+```bash
+docker run --rm -d --name rtsp-streamer --network host \
+  -v "$(pwd)/test_videos":/videos video-bench-dev bash -c \
+  "ffmpeg -re -f concat -safe 0 \
+   -i <(for i in \$(seq 1 100); do echo \"file '/videos/test_video_fhd_h265.mp4'\"; done) \
+   -c:v copy -an \
    -f rtsp rtsp://127.0.0.1:8554/test"
 ```
 

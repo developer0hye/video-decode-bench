@@ -94,6 +94,8 @@ For comprehensive A/B testing, run these combinations:
 
 ## Review workflow
 - When user asks for "review", always save the report to:
-`reviews/YYYYMMDDHHMMSS-review.md`
+`reviews/YYYYMMDDHHMMSS-<title>-review.md`
+  - `<title>`: lowercase kebab-case summary of the review topic (e.g., `thread-pool-refactor`, `memory-leak-fix`, `rtsp-streaming`)
+  - Example: `reviews/20260208215558-thread-pool-refactor-review.md`
 - Create `reviews/` if it does not exist.
 - Do not modify source code unless explicitly requested.
