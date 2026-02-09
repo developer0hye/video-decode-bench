@@ -21,7 +21,7 @@ void OutputFormatter::printHeader(const BenchmarkResult& result) {
              << " (" << result.thread_count << " threads)";
     printInfoLine(cpu_line.str());
 
-    printInfoLine("File: " + result.video_path);
+    printInfoLine((result.is_live_stream ? "Source: " : "File: ") + result.video_path);
 
     std::ostringstream video_line;
     video_line << (result.is_live_stream ? "Source: " : "Video: ")
