@@ -126,6 +126,12 @@ void DecoderThread::run() {
 
         AVPacket* packet = *packet_opt;
 
+        // Check for flush marker (nullptr sentinel from reader on file loop)
+        if (!packet) {
+            decoder.flushBuffers();
+            continue;
+        }
+
         // Decode from packet (may produce 0 or 1 frame due to B-frames)
         SingleFrameResult result = decoder.decodeFromPacket(packet);
         av_packet_free(&packet);

@@ -66,6 +66,10 @@ public:
     // Returns true if a frame was decoded
     SingleFrameResult flushDecoder();
 
+    // Reset decoder state (flush internal buffers without draining)
+    // Used on file loop boundary to discard stale reference frames
+    void flushBuffers();
+
     // Seek to the beginning of the video
     bool seekToStart();
 

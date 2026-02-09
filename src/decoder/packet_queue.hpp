@@ -30,6 +30,10 @@ public:
     // Returns false if timeout elapsed before space became available
     bool push(AVPacket* packet, std::chrono::milliseconds timeout);
 
+    // Push a flush marker (nullptr sentinel) to signal decoder to flush buffers
+    // Used on file loop boundary to reset decoder state
+    bool pushFlushMarker(std::chrono::milliseconds timeout);
+
     // Signal EOF to consumers
     void signalEof();
 

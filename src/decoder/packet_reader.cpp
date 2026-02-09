@@ -74,6 +74,8 @@ void PacketReader::run() {
                 }
                 // File mode: seek to start and continue
                 avformat_seek_file(format_ctx_.get(), -1, INT64_MIN, 0, INT64_MAX, 0);
+                // Signal decoder to flush stale reference frames before new loop
+                queue_.pushFlushMarker(100ms);
                 continue;
             } else {
                 error_message_ = "Read error: " + ffmpegErrorString(ret);

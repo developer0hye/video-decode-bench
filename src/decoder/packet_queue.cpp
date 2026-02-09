@@ -33,6 +33,22 @@ bool PacketQueue::push(AVPacket* packet, std::chrono::milliseconds timeout) {
     return true;
 }
 
+bool PacketQueue::pushFlushMarker(std::chrono::milliseconds timeout) {
+    std::unique_lock lock(mutex_);
+
+    bool space_available = not_full_.wait_for(lock, timeout, [this] {
+        return queue_.size() < max_size_ || eof_;
+    });
+
+    if (!space_available || eof_) {
+        return false;
+    }
+
+    queue_.push(nullptr);
+    not_empty_.notify_one();
+    return true;
+}
+
 void PacketQueue::signalEof() {
     std::lock_guard lock(mutex_);
     eof_ = true;
@@ -77,7 +93,9 @@ void PacketQueue::clear() {
     while (!queue_.empty()) {
         AVPacket* pkt = queue_.front();
         queue_.pop();
-        av_packet_free(&pkt);
+        if (pkt) {
+            av_packet_free(&pkt);
+        }
     }
 }
 

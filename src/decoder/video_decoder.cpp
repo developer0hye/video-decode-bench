@@ -438,4 +438,10 @@ SingleFrameResult VideoDecoder::flushDecoder() {
     }
 }
 
+void VideoDecoder::flushBuffers() {
+    if (is_open_ && codec_ctx_) {
+        avcodec_flush_buffers(codec_ctx_.get());
+    }
+}
+
 } // namespace video_bench
