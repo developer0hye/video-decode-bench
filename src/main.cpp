@@ -28,6 +28,12 @@ int main(int argc, char* argv[]) {
                   << "': " << logger_error << "\n";
     } else {
         Logger::info("Log file: " + log_file_path);
+        std::string cmdline;
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) cmdline += ' ';
+            cmdline += argv[i];
+        }
+        Logger::info("Command: " + cmdline);
     }
 
     if (!parse_result.success) {
@@ -66,6 +72,7 @@ int main(int argc, char* argv[]) {
     BenchmarkResult header_info;
     header_info.cpu_name = SystemInfo::getCpuName();
     header_info.thread_count = SystemInfo::getThreadCount();
+    header_info.video_path = parse_result.config.video_path;
     header_info.video_resolution = video_info->getResolutionString();
     header_info.codec_name = video_info->codec_name;
     header_info.video_fps = video_info->fps;

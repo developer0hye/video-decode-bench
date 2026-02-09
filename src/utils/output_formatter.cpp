@@ -21,6 +21,8 @@ void OutputFormatter::printHeader(const BenchmarkResult& result) {
              << " (" << result.thread_count << " threads)";
     printInfoLine(cpu_line.str());
 
+    printInfoLine("File: " + result.video_path);
+
     std::ostringstream video_line;
     video_line << (result.is_live_stream ? "Source: " : "Video: ")
                << result.video_resolution
@@ -56,6 +58,18 @@ void OutputFormatter::printTestResult(const StreamTestResult& result) {
     }
 
     printInfoLine(line.str());
+
+    // Log per-stream frame counts (log file only)
+    if (!result.per_stream_frames.empty()) {
+        std::ostringstream frames_line;
+        frames_line << "  decoded frames per stream: [";
+        for (size_t i = 0; i < result.per_stream_frames.size(); i++) {
+            if (i > 0) frames_line << ", ";
+            frames_line << result.per_stream_frames[i];
+        }
+        frames_line << "]";
+        video_bench::Logger::info(frames_line.str());
+    }
 }
 
 void OutputFormatter::printSummary(const BenchmarkResult& result) {

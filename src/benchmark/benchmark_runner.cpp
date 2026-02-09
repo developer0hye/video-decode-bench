@@ -169,6 +169,7 @@ void BenchmarkRunner::calculateTestResult(SingleTestResult& single_result,
     test_result.stream_count = stream_count;
     test_result.cpu_usage = cpu_usage;
     test_result.per_stream_fps = std::move(per_stream_fps);
+    test_result.per_stream_frames = per_stream_frames;
 
     // Calculate min/max FPS from per-stream data
     test_result.min_fps = *std::min_element(test_result.per_stream_fps.begin(),
@@ -199,6 +200,7 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
     result.thread_count = SystemInfo::getThreadCount();
 
     // Set video info in result
+    result.video_path = config_.video_path;
     result.video_resolution = video_info_.getResolutionString();
     result.codec_name = video_info_.codec_name;
     result.video_fps = video_info_.fps;
