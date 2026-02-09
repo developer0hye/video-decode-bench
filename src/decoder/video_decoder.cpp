@@ -386,6 +386,11 @@ SingleFrameResult VideoDecoder::decodeFromPacket(AVPacket* packet) {
     // Send packet to decoder
     int ret = avcodec_send_packet(codec_ctx_.get(), packet);
     if (ret < 0 && ret != AVERROR(EAGAIN)) {
+        if (ret == AVERROR_INVALIDDATA) {
+            // Skip invalid packets (common after seek in VP9/AV1)
+            result.success = false;
+            return result;
+        }
         result.error_message = "Send packet error: " + ffmpegErrorString(ret);
         return result;
     }
@@ -396,7 +401,8 @@ SingleFrameResult VideoDecoder::decodeFromPacket(AVPacket* packet) {
         av_frame_unref(frame_.get());
         result.success = true;
         return result;
-    } else if (ret == AVERROR(EAGAIN)) {
+    } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_INVALIDDATA) {
+        // EAGAIN: need more packets; INVALIDDATA: corrupt frame after seek
         result.success = false;
         return result;
     } else if (ret == AVERROR_EOF) {
