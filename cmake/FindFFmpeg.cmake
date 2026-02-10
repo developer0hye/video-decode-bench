@@ -36,19 +36,19 @@ find_path(AVUTIL_INCLUDE_DIR
     PATH_SUFFIXES ffmpeg
 )
 
-# Find libraries
+# Find libraries (include Windows-style names for vcpkg compatibility)
 find_library(AVCODEC_LIBRARY
-    NAMES avcodec
+    NAMES avcodec avcodec-61 avcodec-60
     HINTS ${AVCODEC_LIBRARY_DIRS}
 )
 
 find_library(AVFORMAT_LIBRARY
-    NAMES avformat
+    NAMES avformat avformat-61 avformat-60
     HINTS ${AVFORMAT_LIBRARY_DIRS}
 )
 
 find_library(AVUTIL_LIBRARY
-    NAMES avutil
+    NAMES avutil avutil-59 avutil-58
     HINTS ${AVUTIL_LIBRARY_DIRS}
 )
 

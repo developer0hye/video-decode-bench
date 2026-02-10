@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # ────────────────────────────────────────────────
+  # Linux: static binary via FFmpeg built from source
+  # ────────────────────────────────────────────────
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config nasm yasm
+
+      - name: Cache static FFmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ffmpeg-install
+          key: ffmpeg-static-linux-${{ hashFiles('.github/workflows/release.yml') }}
+
+      - name: Build static FFmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch n7.1 https://github.com/FFmpeg/FFmpeg.git ffmpeg-src
+          cd ffmpeg-src
+          ./configure \
+            --prefix=/tmp/ffmpeg-install \
+            --enable-static \
+            --disable-shared \
+            --enable-pic \
+            --disable-programs \
+            --disable-doc \
+            --disable-everything \
+            --enable-decoder=h264,hevc,vp9,av1 \
+            --enable-demuxer=mov,matroska,webm,rtsp,rtp,sdp \
+            --enable-parser=h264,hevc,vp9,av1 \
+            --enable-protocol=file,tcp,udp,rtp \
+            --enable-muxer=null
+          make -j$(nproc)
+          make install
+
+      - name: Configure project
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIDEO_BENCH_STATIC=ON \
+            -DCMAKE_PREFIX_PATH=/tmp/ffmpeg-install \
+            -DFFMPEG_ROOT=/tmp/ffmpeg-install
+        env:
+          PKG_CONFIG_PATH: /tmp/ffmpeg-install/lib/pkgconfig
+
+      - name: Build project
+        run: cmake --build build --config Release
+
+      - name: Strip and rename binary
+        run: |
+          strip build/video-benchmark
+          cp build/video-benchmark video-benchmark-linux
+
+      - name: Verify binary
+        run: ./video-benchmark-linux --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-benchmark-linux
+          path: video-benchmark-linux
+
+  # ────────────────────────────────────────────────
+  # macOS: dynamic binary with bundled dylibs
+  # ────────────────────────────────────────────────
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: brew install ffmpeg pkg-config
+
+      - name: Configure project
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build project
+        run: cmake --build build --config Release
+
+      - name: Bundle dylibs
+        run: |
+          mkdir -p bundle/lib
+          cp build/video-benchmark bundle/video-benchmark
+
+          # Copy FFmpeg dylibs that the binary depends on
+          for lib in $(otool -L bundle/video-benchmark | grep /opt/homebrew | awk '{print $1}'); do
+            cp "$lib" bundle/lib/
+          done
+
+          # Also copy transitive dependencies of bundled dylibs
+          for bundled in bundle/lib/*.dylib; do
+            for dep in $(otool -L "$bundled" | grep /opt/homebrew | awk '{print $1}'); do
+              dep_name=$(basename "$dep")
+              if [ ! -f "bundle/lib/$dep_name" ]; then
+                cp "$dep" bundle/lib/
+              fi
+            done
+          done
+
+          # Rewrite LC_LOAD_DYLIB paths in the binary
+          for lib in bundle/lib/*.dylib; do
+            lib_name=$(basename "$lib")
+            # Find the original install name
+            original=$(otool -L bundle/video-benchmark | grep "$lib_name" | awk '{print $1}')
+            if [ -n "$original" ]; then
+              install_name_tool -change "$original" "@executable_path/lib/$lib_name" bundle/video-benchmark
+            fi
+          done
+
+          # Rewrite LC_LOAD_DYLIB paths inside each bundled dylib
+          for lib in bundle/lib/*.dylib; do
+            # Update its own ID
+            lib_name=$(basename "$lib")
+            install_name_tool -id "@executable_path/lib/$lib_name" "$lib"
+            # Update references to other bundled dylibs
+            for dep in bundle/lib/*.dylib; do
+              dep_name=$(basename "$dep")
+              original=$(otool -L "$lib" | grep "$dep_name" | grep /opt/homebrew | awk '{print $1}')
+              if [ -n "$original" ]; then
+                install_name_tool -change "$original" "@executable_path/lib/$dep_name" "$lib"
+              fi
+            done
+          done
+
+          # Create tar.gz
+          cd bundle
+          tar czf ../video-benchmark-macos.tar.gz .
+
+      - name: Verify bundle
+        run: |
+          mkdir -p /tmp/test-bundle
+          tar xzf video-benchmark-macos.tar.gz -C /tmp/test-bundle
+          /tmp/test-bundle/video-benchmark --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-benchmark-macos
+          path: video-benchmark-macos.tar.gz
+
+  # ────────────────────────────────────────────────
+  # Windows: static build via vcpkg
+  # ────────────────────────────────────────────────
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install FFmpeg via vcpkg (static)
+        run: vcpkg install ffmpeg[avcodec,avformat,avutil]:x64-windows-static
+
+      - name: Configure project
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DVIDEO_BENCH_STATIC=ON
+          -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+      - name: Build project
+        run: cmake --build build --config Release
+
+      - name: Rename binary
+        run: Copy-Item build/Release/video-benchmark.exe video-benchmark-windows.exe
+
+      - name: Verify binary
+        run: ./video-benchmark-windows.exe --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-benchmark-windows
+          path: video-benchmark-windows.exe
+
+  # ────────────────────────────────────────────────
+  # Create GitHub Release with all artifacts
+  # ────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/video-benchmark-linux/video-benchmark-linux
+            artifacts/video-benchmark-macos/video-benchmark-macos.tar.gz
+            artifacts/video-benchmark-windows/video-benchmark-windows.exe

@@ -11,6 +11,21 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Static linking option (used for release builds)
+option(VIDEO_BENCH_STATIC "Build with static linking" OFF)
+
+if(VIDEO_BENCH_STATIC)
+    if(WIN32)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib" ".a")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    else()
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+    endif()
+endif()
+
 # Add cmake module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -86,6 +101,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     target_link_libraries(video-benchmark PRIVATE
         "-framework CoreFoundation"
         "-framework IOKit"
+    )
+endif()
+
+# Version from git tag
+execute_process(
+    COMMAND git describe --tags --always
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE GIT_RESULT
+)
+if(GIT_RESULT EQUAL 0 AND GIT_VERSION)
+    target_compile_definitions(video-benchmark PRIVATE
+        VIDEO_BENCH_VERSION="${GIT_VERSION}"
     )
 endif()
 
