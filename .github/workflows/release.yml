@@ -175,6 +175,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+          key: vcpkg-x64-windows-static-${{ hashFiles('.github/workflows/release.yml') }}
+
       - name: Install FFmpeg via vcpkg (static)
         run: vcpkg install ffmpeg[avcodec,avformat]:x64-windows-static
 

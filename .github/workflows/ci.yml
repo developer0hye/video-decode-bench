@@ -40,6 +40,13 @@ jobs:
         run: brew install ffmpeg pkg-config
 
       # ── Windows dependencies ──
+      - name: Cache vcpkg packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+          key: vcpkg-x64-windows-${{ hashFiles('.github/workflows/ci.yml') }}
+
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: vcpkg install ffmpeg[avcodec,avformat]:x64-windows
