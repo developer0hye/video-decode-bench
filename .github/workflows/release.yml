@@ -176,7 +176,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install FFmpeg via vcpkg (static)
-        run: vcpkg install ffmpeg[avcodec,avformat,avutil]:x64-windows-static
+        run: vcpkg install ffmpeg[avcodec,avformat]:x64-windows-static
 
       - name: Configure project
         run: >

@@ -71,7 +71,7 @@ private:
     int64_t lag_count_ = 0;
     double max_lag_ms_ = 0.0;
 
-    std::jthread thread_;
+    std::thread thread_;
 };
 
 } // namespace video_bench

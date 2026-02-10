@@ -42,7 +42,7 @@ jobs:
       # ── Windows dependencies ──
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install ffmpeg[avcodec,avformat,avutil]:x64-windows
+        run: vcpkg install ffmpeg[avcodec,avformat]:x64-windows
 
       # ── Build ──
       - name: Configure (Linux/macOS)

@@ -25,7 +25,9 @@ DecoderThread::DecoderThread(int thread_id,
 }
 
 DecoderThread::~DecoderThread() {
-    // jthread automatically joins on destruction
+    if (thread_.joinable()) {
+        thread_.join();
+    }
 }
 
 int64_t DecoderThread::getFramesDecoded() const {
@@ -84,7 +86,7 @@ void DecoderThread::run() {
     }
 
     // Start reader thread
-    std::jthread reader_thread([&reader] { reader.run(); });
+    std::thread reader_thread([&reader] { reader.run(); });
 
     // Calculate frame interval
     const auto frame_interval = std::chrono::duration_cast<Nanoseconds>(
@@ -187,6 +189,8 @@ void DecoderThread::run() {
     if (elapsed > 0) {
         final_fps_ = static_cast<double>(total_frames) / elapsed;
     }
+
+    reader_thread.join();
 }
 
 } // namespace video_bench
