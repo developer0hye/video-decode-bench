@@ -37,8 +37,8 @@ private:
     void calculateTestResult(SingleTestResult& single_result,
                              const std::vector<int64_t>& per_stream_frames,
                              int64_t total_frames, double elapsed,
-                             double cpu_usage, int stream_count,
-                             double target_fps);
+                             double cpu_usage, size_t memory_mb,
+                             int stream_count, double target_fps);
 
     BenchmarkConfig config_;
     VideoInfo video_info_;

@@ -15,6 +15,7 @@ struct StreamTestResult {
     std::vector<double> per_stream_fps;  // FPS for each individual stream
     std::vector<int64_t> per_stream_frames;  // Frame count for each stream
     double cpu_usage;           // Average CPU usage percentage
+    size_t memory_usage_mb = 0; // Process RSS in MB (informational)
     bool fps_passed;            // Met FPS requirement (based on min_fps)
     bool cpu_passed;            // Met CPU threshold
     bool passed;                // Both requirements met
@@ -36,6 +37,7 @@ struct BenchmarkResult {
     // System info
     std::string cpu_name;
     unsigned int thread_count;
+    size_t total_system_memory_mb = 0;
 
     // Video info
     std::string video_path;

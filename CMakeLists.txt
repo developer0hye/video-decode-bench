@@ -62,13 +62,22 @@ set(SOURCES
     src/utils/logger.cpp
 )
 
-# Platform-specific CPU monitor implementation
+# Platform-specific monitor implementations
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    list(APPEND SOURCES src/monitor/cpu_monitor_linux.cpp)
+    list(APPEND SOURCES
+        src/monitor/cpu_monitor_linux.cpp
+        src/monitor/memory_monitor_linux.cpp
+    )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    list(APPEND SOURCES src/monitor/cpu_monitor_macos.cpp)
+    list(APPEND SOURCES
+        src/monitor/cpu_monitor_macos.cpp
+        src/monitor/memory_monitor_macos.cpp
+    )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    list(APPEND SOURCES src/monitor/cpu_monitor_windows.cpp)
+    list(APPEND SOURCES
+        src/monitor/cpu_monitor_windows.cpp
+        src/monitor/memory_monitor_windows.cpp
+    )
 else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
 endif()
@@ -97,11 +106,14 @@ endif()
 
 # Platform-specific settings
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    # macOS: Link with Mach API for CPU monitoring
+    # macOS: Link with Mach API for CPU and memory monitoring
     target_link_libraries(video-benchmark PRIVATE
         "-framework CoreFoundation"
         "-framework IOKit"
     )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    # Windows: Link psapi for GetProcessMemoryInfo
+    target_link_libraries(video-benchmark PRIVATE psapi)
 endif()
 
 # Version from git tag

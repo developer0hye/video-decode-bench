@@ -1,6 +1,7 @@
 #include "benchmark/benchmark_runner.hpp"
 #include "decoder/decoder_thread.hpp"
 #include "monitor/cpu_monitor.hpp"
+#include "monitor/memory_monitor.hpp"
 #include "monitor/system_info.hpp"
 #include <vector>
 #include <memory>
@@ -69,8 +70,9 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     std::barrier start_barrier(stream_count + 1);
     std::atomic<bool> stop_flag{false};
 
-    // Create CPU monitor
+    // Create monitors
     auto cpu_monitor = CpuMonitor::create();
+    auto memory_monitor = MemoryMonitor::create();
 
     // Calculate decoder thread count based on CPU cores and stream count
     // For high stream counts (>=4), use single-threaded decoding to avoid
@@ -113,8 +115,9 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     // Signal threads to stop
     stop_flag.store(true, std::memory_order_release);
 
-    // Get CPU usage before threads finish
+    // Get CPU and memory usage before threads finish
     double cpu_usage = cpu_monitor->getCpuUsage();
+    size_t memory_mb = memory_monitor->getProcessMemoryMB();
 
     auto end_time = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();
@@ -147,7 +150,7 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     threads.clear();
 
     calculateTestResult(single_result, per_stream_frames, total_frames,
-                        elapsed, cpu_usage, stream_count, target_fps);
+                        elapsed, cpu_usage, memory_mb, stream_count, target_fps);
 
     return single_result;
 }
@@ -155,8 +158,8 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
 void BenchmarkRunner::calculateTestResult(SingleTestResult& single_result,
                                            const std::vector<int64_t>& per_stream_frames,
                                            int64_t total_frames, double elapsed,
-                                           double cpu_usage, int stream_count,
-                                           double target_fps) {
+                                           double cpu_usage, size_t memory_mb,
+                                           int stream_count, double target_fps) {
     // Calculate per-stream FPS from frame counts and elapsed time
     std::vector<double> per_stream_fps;
     per_stream_fps.reserve(stream_count);
@@ -168,6 +171,7 @@ void BenchmarkRunner::calculateTestResult(SingleTestResult& single_result,
     StreamTestResult& test_result = single_result.result;
     test_result.stream_count = stream_count;
     test_result.cpu_usage = cpu_usage;
+    test_result.memory_usage_mb = memory_mb;
     test_result.per_stream_fps = std::move(per_stream_fps);
     test_result.per_stream_frames = std::move(per_stream_frames);
 
@@ -198,6 +202,8 @@ BenchmarkResult BenchmarkRunner::run(ProgressCallback progress_callback) {
     // Get system info
     result.cpu_name = SystemInfo::getCpuName();
     result.thread_count = SystemInfo::getThreadCount();
+    auto mem_monitor = MemoryMonitor::create();
+    result.total_system_memory_mb = mem_monitor->getTotalSystemMemoryMB();
 
     // Set video info in result
     result.video_path = config_.video_path;

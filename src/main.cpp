@@ -4,6 +4,7 @@
 #include "benchmark/benchmark_runner.hpp"
 #include "video/video_info.hpp"
 #include "monitor/system_info.hpp"
+#include "monitor/memory_monitor.hpp"
 #include <iostream>
 
 using namespace video_bench;
@@ -72,6 +73,8 @@ int main(int argc, char* argv[]) {
     BenchmarkResult header_info;
     header_info.cpu_name = SystemInfo::getCpuName();
     header_info.thread_count = SystemInfo::getThreadCount();
+    auto mem_monitor = MemoryMonitor::create();
+    header_info.total_system_memory_mb = mem_monitor->getTotalSystemMemoryMB();
     header_info.video_path = parse_result.config.video_path;
     header_info.video_resolution = video_info->getResolutionString();
     header_info.codec_name = video_info->codec_name;

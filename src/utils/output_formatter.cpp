@@ -21,6 +21,12 @@ void OutputFormatter::printHeader(const BenchmarkResult& result) {
              << " (" << result.thread_count << " threads)";
     printInfoLine(cpu_line.str());
 
+    if (result.total_system_memory_mb > 0) {
+        std::ostringstream ram_line;
+        ram_line << "RAM: " << (result.total_system_memory_mb / 1024) << " GB";
+        printInfoLine(ram_line.str());
+    }
+
     printInfoLine((result.is_live_stream ? "Source: " : "File: ") + result.video_path);
 
     std::ostringstream video_line;
@@ -51,6 +57,7 @@ void OutputFormatter::printTestResult(const StreamTestResult& result) {
          << "/avg:" << static_cast<int>(result.fps_per_stream)
          << "/max:" << static_cast<int>(result.max_fps) << ")"
          << " (CPU: " << std::setw(2) << static_cast<int>(result.cpu_usage) << "%)"
+         << " (RAM: " << std::setw(4) << result.memory_usage_mb << "MB)"
          << " " << result.getStatusSymbol();
 
     if (!result.passed) {
