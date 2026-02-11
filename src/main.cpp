@@ -1,5 +1,6 @@
 #include "utils/cli_parser.hpp"
 #include "utils/output_formatter.hpp"
+#include "utils/csv_exporter.hpp"
 #include "utils/logger.hpp"
 #include "benchmark/benchmark_runner.hpp"
 #include "video/video_info.hpp"
@@ -99,6 +100,16 @@ int main(int argc, char* argv[]) {
 
     // Print summary
     OutputFormatter::printSummary(result);
+
+    // Export CSV if requested
+    if (parse_result.config.csv_file) {
+        std::string csv_error;
+        if (!CsvExporter::exportToFile(result, *parse_result.config.csv_file, csv_error)) {
+            OutputFormatter::printError(csv_error);
+            return 1;
+        }
+        Logger::info("CSV results exported to: " + *parse_result.config.csv_file);
+    }
 
     return 0;
 }

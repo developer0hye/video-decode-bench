@@ -19,6 +19,9 @@ struct BenchmarkConfig {
     // Optional: log file path (default: video-benchmark.log)
     std::optional<std::string> log_file;
 
+    // Optional: CSV output file path
+    std::optional<std::string> csv_file;
+
     // Measurement duration per test in seconds
     double measurement_duration = 10.0;
 

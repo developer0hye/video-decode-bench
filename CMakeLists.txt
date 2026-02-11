@@ -59,6 +59,7 @@ set(SOURCES
     src/monitor/system_info.cpp
     src/utils/cli_parser.cpp
     src/utils/output_formatter.cpp
+    src/utils/csv_exporter.cpp
     src/utils/logger.cpp
 )
 
