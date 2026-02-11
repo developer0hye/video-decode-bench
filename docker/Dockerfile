@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     libavutil-dev \
     libswscale-dev \
     libswresample-dev \
+    python3 \
+    python3-tabulate \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -57,4 +57,5 @@ video-benchmark.log
 reviews/
 logs/
 todos/
+benchmark_results/
 *.csv

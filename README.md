@@ -210,6 +210,26 @@ Simply pass the camera's RTSP URL:
 
 Note: Each decoder thread opens its own RTSP connection, so the camera must support multiple concurrent connections.
 
+## Full Benchmark (All Codecs x Resolutions)
+
+Run benchmarks on all 12 test videos (4 codecs x 3 resolutions) and get a summary report.
+The script runs inside the Docker container — no extra dependencies on the host.
+
+```bash
+# Build + run full benchmark
+docker run --rm -v "$(pwd)":/app -w /app video-bench-dev \
+    python3 scripts/run_full_benchmark.py --max-streams 32
+
+# Skip build if already compiled
+docker run --rm -v "$(pwd)":/app -w /app video-bench-dev \
+    python3 scripts/run_full_benchmark.py --skip-build --max-streams 32
+```
+
+Results are saved to `benchmark_results/<timestamp>/`:
+- `summary.txt` - Summary table
+- `summary.csv` - Machine-readable summary
+- Per-video `*.csv` and `*.log` files
+
 ## Native Build (Optional)
 
 If you want to build outside Docker, install a C++20 toolchain, FFmpeg development libraries, and CMake, then:
