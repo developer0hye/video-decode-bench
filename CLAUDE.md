@@ -5,6 +5,11 @@
 
 For detailed project specification, refer to @.claude/rules/project-spec.md
 
+## Commit Rules
+- All commits must include a `Signed-off-by` line to pass DCO check (always use `git commit -s`)
+- All commits must use the local git config `user.name` and `user.email` for both author and committer
+- The `Signed-off-by` name must match the commit author identity
+
 ## Branch Rules
 - Always create a new branch before starting work on a new feature or task
 - Branch naming convention: `feature/<short-description>` (e.g., `feature/rtsp-support`, `feature/csv-export`)
