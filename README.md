@@ -11,6 +11,39 @@
 - **RTSP stream support** for IP camera / network stream testing
 - Result logging to `video-benchmark.log` (thread-safe logging via `spdlog`)
 
+## Sample Results
+
+Below is a sample benchmark result showing the maximum number of concurrent real-time decode streams per codec and resolution (CPU software decoding only).
+
+> Tested on: 8-thread CPU / 7 GB RAM / Docker (linux/arm64) — max 32 streams
+
+### Maximum Concurrent Streams
+
+| | H.264 | H.265 | VP9 | AV1 |
+|---|:---:|:---:|:---:|:---:|
+| **HD (720p)** | 31 | 16 | 24 | 3 |
+| **FHD (1080p)** | 21 | 9 | 12 | 3 |
+| **4K (2160p)** | 3 | 2 | 3 | 1 |
+
+### Resource Usage at Max Streams
+
+| Resolution | Codec | Max Streams | Avg FPS | CPU % | RAM (MB) |
+|---|---|:---:|:---:|:---:|:---:|
+| HD (720p) | H.264 | 31 | 30 | 50% | 460 |
+| HD (720p) | H.265 | 16 | 30 | 54% | 398 |
+| HD (720p) | VP9 | 24 | 30 | 61% | 247 |
+| HD (720p) | AV1 | 3 | 30 | 16% | 114 |
+| FHD (1080p) | H.264 | 21 | 30 | 75% | 589 |
+| FHD (1080p) | H.265 | 9 | 30 | 71% | 428 |
+| FHD (1080p) | VP9 | 12 | 30 | 47% | 238 |
+| FHD (1080p) | AV1 | 3 | 30 | 23% | 219 |
+| 4K (2160p) | H.264 | 3 | 30 | 27% | 503 |
+| 4K (2160p) | H.265 | 2 | 30 | 41% | 481 |
+| 4K (2160p) | VP9 | 3 | 30 | 24% | 367 |
+| 4K (2160p) | AV1 | 1 | 30 | 21% | 309 |
+
+*Results vary by hardware. Run the [full benchmark](#full-benchmark-all-codecs-x-resolutions) to get numbers for your system.*
+
 ## Repository Structure
 
 - `src/`: core benchmark source code
