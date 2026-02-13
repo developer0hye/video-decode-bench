@@ -9,6 +9,33 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - Always create a new branch before starting work on a new feature or task
 - Branch naming convention: `feature/<short-description>` (e.g., `feature/rtsp-support`, `feature/csv-export`)
 - Never commit new feature work directly to the `main` branch
+- Never use `git checkout` or `git switch` to change branches. Use `git worktree` to work on multiple branches simultaneously in separate directories
+
+### Git Worktree Workflow
+
+1. **Create a worktree for a new feature:**
+   ```bash
+   git worktree add ../video-decode-bench-<branch-name> -b feature/<short-description>
+   ```
+   Example:
+   ```bash
+   git worktree add ../video-decode-bench-rtsp-support -b feature/rtsp-support
+   ```
+
+2. **Work inside the worktree directory**, not the main repository:
+   ```bash
+   cd ../video-decode-bench-rtsp-support
+   ```
+
+3. **Cleanup after merging:** Remove the worktree when the branch is merged:
+   ```bash
+   git worktree remove ../video-decode-bench-<branch-name>
+   ```
+
+4. **List active worktrees:**
+   ```bash
+   git worktree list
+   ```
 
 ## Task Execution Guidelines
 - Break down all tasks into extremely small, atomic units
@@ -54,26 +81,22 @@ Examples:
    mkdir -p logs
    ```
 
-2. **Test BEFORE changes** (baseline):
+2. **Test BEFORE changes** (baseline) — use the main worktree:
    ```bash
-   git stash  # or checkout original commit
-   # Rebuild
-   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+   # Build and run in the main worktree (unchanged code)
+   docker run --rm -v /path/to/video-decode-bench:/app video-bench-dev bash -c \
      "cd /app/build && cmake .. && make -j4"
-   # Run benchmark with descriptive log name
-   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+   docker run --rm -v /path/to/video-decode-bench:/app video-bench-dev bash -c \
      "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
        --max-streams 32 --log-file /app/logs/20260208143000-optimization-before.log"
    ```
 
-3. **Test AFTER changes** (optimized):
+3. **Test AFTER changes** (optimized) — use the feature worktree:
    ```bash
-   git stash pop  # or apply changes
-   # Rebuild
-   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+   # Build and run in the feature worktree (modified code)
+   docker run --rm -v /path/to/video-decode-bench-<branch-name>:/app video-bench-dev bash -c \
      "cd /app/build && cmake .. && make -j4"
-   # Run benchmark
-   docker run --rm -v $(pwd):/app video-bench-dev bash -c \
+   docker run --rm -v /path/to/video-decode-bench-<branch-name>:/app video-bench-dev bash -c \
      "/app/build/video-benchmark /app/test_videos/test_video_hd_h264.mp4 \
        --max-streams 32 --log-file /app/logs/20260208143000-optimization-after.log"
    ```
