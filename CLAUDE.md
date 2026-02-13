@@ -5,6 +5,11 @@
 
 For detailed project specification, refer to @.claude/rules/project-spec.md
 
+## Branch Rules
+- Always create a new branch before starting work on a new feature or task
+- Branch naming convention: `feature/<short-description>` (e.g., `feature/rtsp-support`, `feature/csv-export`)
+- Never commit new feature work directly to the `main` branch
+
 ## Task Execution Guidelines
 - Break down all tasks into extremely small, atomic units
 - Each unit should be independently verifiable and testable
