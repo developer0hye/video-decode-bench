@@ -120,7 +120,9 @@ Examples:
        --max-streams 32 --log-file /app/logs/20260208143000-optimization-after.log"
    ```
 
-4. **Compare results**: Check max streams, CPU usage, and FPS stability
+4. **Repeat each test at least 3 times**: Run both baseline and optimized variants a minimum of 3 times each to account for variance in CPU scheduling, thermal throttling, and system load. Use the median result for comparison.
+
+5. **Compare results**: Check max streams, CPU usage, and FPS stability across all runs
 
 ### Recommended Test Matrix
 For comprehensive A/B testing, run these combinations:
