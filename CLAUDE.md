@@ -57,6 +57,11 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - Use appropriate log levels (e.g., ERROR for failures, WARN for potential issues, INFO for key execution milestones, DEBUG for development-only details)
 - Never log sensitive data or large data dumps; keep messages concise and actionable
 
+## Program Execution Rules
+- Always run programs sequentially — never run multiple program executions in parallel
+- Wait for the current execution to fully complete before starting the next one
+- This applies to all program runs including builds, tests, benchmarks, and A/B tests
+
 ## Build & Test Commands
 - Docker image build: `docker build -t video-bench-dev -f docker/Dockerfile .`
 - Development container: `docker run -it -v $(pwd):/app video-bench-dev bash`
