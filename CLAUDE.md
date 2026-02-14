@@ -68,6 +68,7 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - Build inside container: `mkdir build && cd build && cmake .. && make`
 - When building or testing, always use the Docker environment defined in `docker/Dockerfile`
 - Do not attempt to build or test on the host machine directly; rely on the Docker container for consistent dependencies
+- When running video decoding tests, always use `--max-streams 1024`
 
 ## A/B Testing Guidelines
 
