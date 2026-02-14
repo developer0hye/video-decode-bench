@@ -105,6 +105,77 @@ void PacketReader::run() {
     queue_.signalEof();
 }
 
+ReadResult PacketReader::readNextPacket() {
+    using namespace std::chrono_literals;
+
+    if (done_) return ReadResult::kDone;
+
+    // Retry pending flush marker from previous file loop
+    if (pending_flush_) {
+        if (queue_.pushFlushMarker(0ms)) {
+            pending_flush_ = false;
+            return ReadResult::kSkipped;
+        }
+        return ReadResult::kQueueFull;
+    }
+
+    // Retry pending video packet from previous call
+    if (has_pending_) {
+        if (queue_.push(packet_.get(), 1ms)) {
+            av_packet_unref(packet_.get());
+            has_pending_ = false;
+            return ReadResult::kPacketQueued;
+        }
+        return ReadResult::kQueueFull;
+    }
+
+    int ret = av_read_frame(format_ctx_.get(), packet_.get());
+    if (ret < 0) {
+        if (ret == AVERROR_EOF) {
+            if (is_live_stream_) {
+                error_message_ = "Stream ended";
+                has_error_.store(true, std::memory_order_release);
+                queue_.signalEof();
+                done_ = true;
+                return ReadResult::kDone;
+            }
+            // File mode: seek to start and signal flush
+            avformat_seek_file(format_ctx_.get(), -1, INT64_MIN, 0, INT64_MAX, 0);
+            if (!queue_.pushFlushMarker(0ms)) {
+                pending_flush_ = true;
+                return ReadResult::kQueueFull;
+            }
+            return ReadResult::kSkipped;
+        }
+        error_message_ = "Read error: " + ffmpegErrorString(ret);
+        has_error_.store(true, std::memory_order_release);
+        queue_.signalEof();
+        done_ = true;
+        return ReadResult::kDone;
+    }
+
+    if (packet_->stream_index == video_stream_index_) {
+        if (queue_.push(packet_.get(), 1ms)) {
+            av_packet_unref(packet_.get());
+            return ReadResult::kPacketQueued;
+        }
+        // Queue full — keep packet for retry on next call
+        has_pending_ = true;
+        return ReadResult::kQueueFull;
+    }
+
+    // Non-video packet, skip
+    av_packet_unref(packet_.get());
+    return ReadResult::kSkipped;
+}
+
+void PacketReader::signalDone() {
+    if (!done_) {
+        queue_.signalEof();
+        done_ = true;
+    }
+}
+
 bool PacketReader::hasError() const {
     return has_error_.load(std::memory_order_acquire);
 }

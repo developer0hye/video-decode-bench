@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <optional>
 #include <chrono>
+#include <functional>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -41,6 +42,11 @@ public:
     // Returns nullopt if timeout elapsed or EOF reached with empty queue
     std::optional<AVPacket*> pop(std::chrono::milliseconds timeout);
 
+    // Set callback invoked after pop() creates space (for reader pool wake-up).
+    // Called outside the queue's lock to avoid deadlock.
+    using SpaceCallback = std::function<void()>;
+    void setSpaceCallback(SpaceCallback callback);
+
     // Check if EOF has been signaled and queue is empty
     bool isEof() const;
 
@@ -57,6 +63,7 @@ private:
     std::condition_variable not_empty_;
     size_t max_size_;
     bool eof_ = false;
+    SpaceCallback space_callback_;
 };
 
 } // namespace video_bench
