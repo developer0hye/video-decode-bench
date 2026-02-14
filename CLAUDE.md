@@ -69,6 +69,13 @@ For detailed project specification, refer to @.claude/rules/project-spec.md
 - When building or testing, always use the Docker environment defined in `docker/Dockerfile`
 - Do not attempt to build or test on the host machine directly; rely on the Docker container for consistent dependencies
 
+## Docker Execution Rules
+- Never use `cd <dir> && docker ...` pattern — always start commands with `docker` directly
+- Use absolute paths in `-v` mounts instead of `$(pwd)` (required for `Bash(docker *)` permission pattern to match)
+  - ✅ `docker run --rm -v /absolute/path/to/worktree:/app video-bench-dev bash -c "..."`
+  - ❌ `cd /some/worktree && docker run --rm -v "$(pwd)":/app video-bench-dev bash -c "..."`
+- This is especially important with git worktree workflows where mount paths vary per branch
+
 ## A/B Testing Guidelines
 
 When comparing performance before/after code changes, use consistent log file naming:
