@@ -2,6 +2,7 @@
 
 ## Coding Rules
 - All code, comments, and documentation must be written in English
+- When working on throughput improvements, always design changes to benefit both local file and RTSP input paths — avoid optimizations that only help one case at the expense of the other
 
 For detailed project specification, refer to @.claude/rules/project-spec.md
 
