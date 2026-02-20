@@ -1,5 +1,6 @@
 #include "benchmark/benchmark_runner.hpp"
 #include "decoder/decoder_thread.hpp"
+#include "decoder/decoder_pool.hpp"
 #include "monitor/cpu_monitor.hpp"
 #include "monitor/memory_monitor.hpp"
 #include "monitor/system_info.hpp"
@@ -63,6 +64,19 @@ std::vector<int> BenchmarkRunner::getStreamCountsToTest(int max_streams) const {
 }
 
 BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_count, double target_fps) {
+    unsigned int cpu_cores = std::thread::hardware_concurrency();
+    if (cpu_cores == 0) cpu_cores = 4;
+
+    bool use_pool = (stream_count >= static_cast<int>(cpu_cores));
+
+    if (use_pool) {
+        return runSingleTestPool(stream_count, target_fps, cpu_cores);
+    }
+    return runSingleTestDirect(stream_count, target_fps, cpu_cores);
+}
+
+BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTestDirect(
+        int stream_count, double target_fps, unsigned int cpu_cores) {
     SingleTestResult single_result;
     single_result.has_error = false;
 
@@ -75,17 +89,10 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     auto memory_monitor = MemoryMonitor::create();
 
     // Calculate decoder thread count based on CPU cores and stream count
-    // For high stream counts (>=4), use single-threaded decoding to avoid
-    // thread oversubscription (N OS threads + N*M FFmpeg threads competing)
-    unsigned int cpu_cores = std::thread::hardware_concurrency();
-    if (cpu_cores == 0) cpu_cores = 4;  // fallback
-
     int decoder_threads;
     if (stream_count >= kMultiThreadStreamThreshold) {
-        // High stream count: single-threaded FFmpeg to prevent oversubscription
         decoder_threads = 1;
     } else {
-        // Low stream count: allow FFmpeg multi-threading
         decoder_threads = std::max(1, static_cast<int>(cpu_cores) / stream_count);
     }
 
@@ -123,7 +130,6 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
     double elapsed = std::chrono::duration<double>(end_time - start_time).count();
 
     // Wait for all threads to fully stop before collecting results
-    // This ensures final frame counts are accurate
     for (const auto& thread : threads) {
         thread->join();
     }
@@ -146,8 +152,88 @@ BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTest(int stream_coun
         per_stream_frames.push_back(thread_result.frames_decoded);
     }
 
-    // Clear threads (already joined)
     threads.clear();
+
+    calculateTestResult(single_result, per_stream_frames, total_frames,
+                        elapsed, cpu_usage, memory_mb, stream_count, target_fps);
+
+    return single_result;
+}
+
+BenchmarkRunner::SingleTestResult BenchmarkRunner::runSingleTestPool(
+        int stream_count, double target_fps, unsigned int cpu_cores) {
+    SingleTestResult single_result;
+    single_result.has_error = false;
+
+    // Worker count = stream count for 1:1 pacing quality (each worker owns 1 stream).
+    // Reader count = cpu_cores (I/O-bound readers need few threads).
+    // Total threads: R readers + W workers + 1 main = cpu_cores + N + 1
+    // (vs 2N + 1 in baseline, saving N - cpu_cores threads).
+    unsigned int worker_count = static_cast<unsigned int>(stream_count);
+    unsigned int reader_count = cpu_cores;
+
+    // Barrier: P workers + 1 main thread
+    std::barrier start_barrier(static_cast<int>(worker_count) + 1);
+    std::atomic<bool> stop_flag{false};
+
+    auto cpu_monitor = CpuMonitor::create();
+    auto memory_monitor = MemoryMonitor::create();
+
+    bool is_live = video_info_.is_live_stream;
+
+    auto pool = std::make_unique<DecoderPool>(
+        stream_count, config_.video_path, target_fps,
+        /*decoder_thread_count=*/1, is_live,
+        start_barrier, stop_flag, worker_count, reader_count);
+
+    if (pool->hasInitError()) {
+        // Must still arrive at barrier to prevent deadlock
+        start_barrier.arrive_and_wait();
+        stop_flag.store(true, std::memory_order_release);
+        pool->join();
+        single_result.has_error = true;
+        single_result.error_message = pool->getInitError();
+        return single_result;
+    }
+
+    // Wait for all workers to be ready
+    start_barrier.arrive_and_wait();
+
+    cpu_monitor->startMeasurement();
+    auto start_time = std::chrono::steady_clock::now();
+
+    std::this_thread::sleep_for(
+        std::chrono::duration<double>(config_.measurement_duration));
+
+    stop_flag.store(true, std::memory_order_release);
+
+    double cpu_usage = cpu_monitor->getCpuUsage();
+    size_t memory_mb = memory_monitor->getProcessMemoryMB();
+
+    auto end_time = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(end_time - start_time).count();
+
+    pool->join();
+
+    auto pool_results = pool->getResults();
+
+    int64_t total_frames = 0;
+    std::vector<int64_t> per_stream_frames;
+    per_stream_frames.reserve(stream_count);
+
+    for (const auto& r : pool_results) {
+        if (!r.success) {
+            single_result.has_error = true;
+            if (single_result.error_message.empty()) {
+                single_result.error_message = "Stream " + std::to_string(r.thread_id)
+                                            + ": " + r.error_message;
+            }
+        }
+        total_frames += r.frames_decoded;
+        per_stream_frames.push_back(r.frames_decoded);
+    }
+
+    pool.reset();
 
     calculateTestResult(single_result, per_stream_frames, total_frames,
                         elapsed, cpu_usage, memory_mb, stream_count, target_fps);

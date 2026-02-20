@@ -8,6 +8,14 @@
 
 namespace video_bench {
 
+// Result of a single readNextPacket() call
+enum class ReadResult {
+    kPacketQueued,   // Video packet read and pushed to queue
+    kQueueFull,      // Video packet ready but queue is full (retry later)
+    kSkipped,        // Non-video packet skipped or flush marker sent
+    kDone            // Reader is finished (EOF in live mode or error)
+};
+
 // I/O-dedicated reader that reads packets from video source
 // Runs in a separate thread to decouple I/O from decoding
 class PacketReader {
@@ -20,8 +28,14 @@ public:
     // Initialize the reader (open file/stream, find video stream)
     bool init(std::string& error_message);
 
-    // Reader thread entry point
+    // Reader thread entry point (blocking loop for 1:1 mode)
     void run();
+
+    // Single-iteration read for reader pooling (non-blocking)
+    ReadResult readNextPacket();
+
+    // Signal EOF to queue (called by reader pool on stop)
+    void signalDone();
 
     // Check if reader encountered an error
     bool hasError() const;
@@ -48,6 +62,11 @@ private:
 
     std::atomic<bool> has_error_{false};
     std::string error_message_;
+
+    // State for incremental reading (readNextPacket)
+    bool has_pending_ = false;
+    bool pending_flush_ = false;
+    bool done_ = false;
 };
 
 } // namespace video_bench

@@ -56,26 +56,38 @@ void PacketQueue::signalEof() {
     not_full_.notify_all();
 }
 
+void PacketQueue::setSpaceCallback(SpaceCallback callback) {
+    space_callback_ = std::move(callback);
+}
+
 std::optional<AVPacket*> PacketQueue::pop(std::chrono::milliseconds timeout) {
-    std::unique_lock lock(mutex_);
+    AVPacket* packet = nullptr;
+    bool did_pop = false;
 
-    // Wait for packet or EOF
-    bool has_data = not_empty_.wait_for(lock, timeout, [this] {
-        return !queue_.empty() || eof_;
-    });
+    {
+        std::unique_lock lock(mutex_);
 
-    if (!has_data || (queue_.empty() && eof_)) {
-        return std::nullopt;
+        // Wait for packet or EOF
+        bool has_data = not_empty_.wait_for(lock, timeout, [this] {
+            return !queue_.empty() || eof_;
+        });
+
+        if (has_data && !queue_.empty()) {
+            packet = queue_.front();
+            queue_.pop();
+            not_full_.notify_one();
+            did_pop = true;
+        }
     }
 
-    if (queue_.empty()) {
-        return std::nullopt;
+    if (did_pop) {
+        // Signal reader pool after releasing queue lock to avoid deadlock
+        if (space_callback_) {
+            space_callback_();
+        }
+        return packet;
     }
-
-    AVPacket* packet = queue_.front();
-    queue_.pop();
-    not_full_.notify_one();
-    return packet;
+    return std::nullopt;
 }
 
 bool PacketQueue::isEof() const {

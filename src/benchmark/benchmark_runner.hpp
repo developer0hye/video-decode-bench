@@ -30,8 +30,16 @@ private:
         std::string error_message;
     };
 
-    // Run a single stream count test
+    // Run a single stream count test (dispatches to direct or pool mode)
     SingleTestResult runSingleTest(int stream_count, double target_fps);
+
+    // 1:1 mode: one DecoderThread per stream (stream_count < cpu_cores)
+    SingleTestResult runSingleTestDirect(int stream_count, double target_fps,
+                                         unsigned int cpu_cores);
+
+    // Pool mode: fixed worker threads service all streams (stream_count >= cpu_cores)
+    SingleTestResult runSingleTestPool(int stream_count, double target_fps,
+                                       unsigned int cpu_cores);
 
     // Calculate test result from collected frame data
     void calculateTestResult(SingleTestResult& single_result,

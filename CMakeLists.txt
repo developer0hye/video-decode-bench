@@ -55,6 +55,7 @@ set(SOURCES
     src/decoder/decoder_thread.cpp
     src/decoder/packet_queue.cpp
     src/decoder/packet_reader.cpp
+    src/decoder/decoder_pool.cpp
     src/benchmark/benchmark_runner.cpp
     src/monitor/system_info.cpp
     src/utils/cli_parser.cpp
